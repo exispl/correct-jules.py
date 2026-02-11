@@ -90,7 +90,7 @@ class HistoryItem(ctk.CTkFrame):
 
             self.expanded = True
 
-# --- POPUP ---
+# --- POPUPS ---
 class ReviewPopup(ctk.CTkToplevel):
     def __init__(self, parent, action, original, result, duration):
         super().__init__(parent)
@@ -147,3 +147,65 @@ class ReviewPopup(ctk.CTkToplevel):
 
         cfg.add_history_entry(self.action, self.original, self.result, self.duration, diffs)
         gui_queue.put(("REFRESH", None))
+
+class QuickReviewDialog(ctk.CTkToplevel):
+    def __init__(self, parent, review_list):
+        super().__init__(parent)
+        self.review_list = review_list # List of (old, new) tuples
+        self.index = 0
+        self.title("Szybki Przegląd Słówek")
+        self.geometry("400x300")
+        self.attributes("-topmost", True)
+
+        colors = cfg.get_theme_colors()
+        self.configure(fg_color=colors.get("fg_color"))
+
+        self.lbl_counter = ctk.CTkLabel(self, text="0/0", text_color="gray")
+        self.lbl_counter.pack(pady=5)
+
+        self.card_frame = ctk.CTkFrame(self, fg_color=colors.get("frame_color"), corner_radius=15)
+        self.card_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        self.lbl_bad = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 24, "bold"), text_color="#FF4747")
+        self.lbl_bad.pack(expand=True)
+
+        ctk.CTkLabel(self.card_frame, text="⬇️", font=("Arial", 20)).pack()
+
+        self.lbl_good = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 24, "bold"), text_color="#2CC985")
+        self.lbl_good.pack(expand=True)
+
+        help_lbl = ctk.CTkLabel(self, text="[➡] Akceptuj   [⬅] Odrzuć   [⬇] Pomiń", text_color="gray", font=("Consolas", 10))
+        help_lbl.pack(pady=10)
+
+        self.bind("<Right>", lambda e: self.action_accept())
+        self.bind("<Left>", lambda e: self.action_reject())
+        self.bind("<Down>", lambda e: self.action_skip())
+
+        self.show_current()
+
+    def show_current(self):
+        if self.index >= len(self.review_list):
+            self.destroy()
+            return
+
+        old, new = self.review_list[self.index]
+        self.lbl_bad.configure(text=old)
+        self.lbl_good.configure(text=new)
+        self.lbl_counter.configure(text=f"{self.index + 1}/{len(self.review_list)}")
+
+    def action_accept(self):
+        old, new = self.review_list[self.index]
+        cfg.auto_replace.add_replacement(old, new)
+        self.next_item()
+
+    def action_reject(self):
+        old, _ = self.review_list[self.index]
+        cfg.auto_replace.add_ignore(old)
+        self.next_item()
+
+    def action_skip(self):
+        self.next_item()
+
+    def next_item(self):
+        self.index += 1
+        self.show_current()

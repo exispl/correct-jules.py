@@ -33,12 +33,14 @@ class MainApp(ctk.CTk):
         self.tabs = {
             "Dash": self.tabview.add("Dashboard"),
             "Hist": self.tabview.add("Historia"),
+            "Snip": self.tabview.add("Snippety"),
             "Sett": self.tabview.add("Ustawienia"),
         }
 
         # Init Modules
         self.setup_dash()
         self.setup_hist()
+        self.setup_snip()
         self.setup_sett()
 
         # Footer
@@ -47,6 +49,11 @@ class MainApp(ctk.CTk):
 
         if not cfg.config.get("api_key"):
             self.status.configure(text="⚠️ Skonfiguruj klucz API w ustawieniach!", text_color="#ffcc00")
+
+        if not cfg.user_profile.get("logged_in"):
+            self.show_login_overlay()
+        else:
+            self.show_user_badge()
 
         # Background tasks
         self.check_queue()
@@ -84,12 +91,12 @@ class MainApp(ctk.CTk):
 
         ctk.CTkLabel(input_label_frame, text="Wprowadź tekst:", text_color=colors.get("text_color")).pack(side="left")
 
-        # Tools Icons (Copy, Paste History)
-        ctk.CTkButton(input_label_frame, text="📋", width=30, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
-                      text_color=colors.get("text_color"), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=2)
+        # Tools Icons (Copy, Paste History) - Bigger Icons
+        ctk.CTkButton(input_label_frame, text="📋", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 16), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
 
-        ctk.CTkButton(input_label_frame, text="🗂️ Win+V", width=60, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
-                      text_color=colors.get("text_color"), command=self.trigger_win_v).pack(side="right", padx=2)
+        ctk.CTkButton(input_label_frame, text="🗂️", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 16), command=self.trigger_win_v).pack(side="right", padx=5)
 
         self.test_in = ctk.CTkTextbox(f, height=100, font=(cfg.config["font_family"], cfg.config["font_size"]),
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
@@ -117,8 +124,8 @@ class MainApp(ctk.CTk):
         output_label_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(10,0))
         ctk.CTkLabel(output_label_frame, text="Wynik:", text_color=colors.get("text_color")).pack(side="left")
 
-        ctk.CTkButton(output_label_frame, text="📋", width=30, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
-                      text_color=colors.get("text_color"), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=2)
+        ctk.CTkButton(output_label_frame, text="📋", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 16), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=5)
 
         self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
         self.out_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
@@ -141,6 +148,59 @@ class MainApp(ctk.CTk):
     def trigger_win_v(self):
         keyboard.send('windows+v')
         self.status.configure(text="Otwarto historię schowka (Win+V)", text_color=colors.get("accent_text"))
+
+    def show_user_badge(self):
+        # Small badge in top right or dashboard
+        # For now let's put it in Dashboard top right
+        f = self.tabs["Dash"]
+        colors = cfg.get_theme_colors()
+
+        name = cfg.user_profile.get("name", "Gość")
+        badge = ctk.CTkLabel(f, text=f"👤 {name}", text_color=colors.get("text_color"), fg_color=colors.get("frame_color"), corner_radius=10)
+        badge.place(relx=0.95, rely=0.02, anchor="ne")
+        badge.bind("<Button-1>", lambda e: self.logout())
+
+    def logout(self):
+        cfg.user_profile = {"name": "Gość", "email": "", "photo": "", "logged_in": False}
+        cfg.save_profile()
+        self.status.configure(text="Wylogowano.", text_color="yellow")
+        # Remove badge
+        for w in self.tabs["Dash"].place_slaves(): w.destroy()
+        self.show_login_overlay()
+
+    def show_login_overlay(self):
+        self.login_frame = ctk.CTkFrame(self, fg_color="black") # Overlay
+        self.login_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        c = ctk.CTkFrame(self.login_frame, fg_color="#333", corner_radius=20)
+        c.place(relx=0.5, rely=0.5, anchor="center", width=400, height=300)
+
+        ctk.CTkLabel(c, text="AI Assistant Pro", font=("Arial", 24, "bold"), text_color="white").pack(pady=20)
+        ctk.CTkLabel(c, text="Zaloguj się, aby synchronizować ustawienia", text_color="gray").pack()
+
+        # Fake Google Button
+        btn_g = ctk.CTkButton(c, text="   Zaloguj przez Google   ", fg_color="white", text_color="black", hover_color="#f0f0f0",
+                              height=40, font=("Arial", 14), command=self.perform_fake_login)
+        btn_g.pack(pady=40)
+
+        ctk.CTkButton(c, text="Pomiń (Tryb Gościa)", fg_color="transparent", text_color="gray", hover=False, command=self.skip_login).pack(side="bottom", pady=20)
+
+    def perform_fake_login(self):
+        # Simulate Network Request
+        self.login_frame.destroy()
+        cfg.user_profile = {
+            "name": "Jan Kowalski",
+            "email": "jan.kowalski@gmail.com",
+            "photo": "",
+            "logged_in": True
+        }
+        cfg.save_profile()
+        self.show_user_badge()
+        self.status.configure(text="Zalogowano pomyślnie!", text_color="green")
+
+    def skip_login(self):
+        self.login_frame.destroy()
+        self.status.configure(text="Tryb Gościa.", text_color="gray")
 
     def run_dashboard_action(self, action_code):
         txt = self.test_in.get("0.0", "end").strip()
@@ -260,6 +320,82 @@ class MainApp(ctk.CTk):
         res = d.get_input()
         if res:
             btn.configure(text=res)
+
+    # --- SNIPPETS ---
+    def setup_snip(self):
+        f = self.tabs["Snip"]
+        colors = cfg.get_theme_colors()
+
+        # Tools
+        tool_bar = ctk.CTkFrame(f, fg_color="transparent")
+        tool_bar.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkButton(tool_bar, text="➕ Nowy Snippet", command=self.add_snippet_dialog, fg_color=colors.get("button_color"), text_color="white").pack(side="left")
+        ctk.CTkLabel(tool_bar, text="Wpisz skrót (np. ;mail) -> Spacja", text_color="gray").pack(side="right")
+
+        # List
+        self.snip_scroll = ctk.CTkScrollableFrame(f)
+        self.snip_scroll.pack(fill="both", expand=True, padx=5, pady=5)
+        self.refresh_snip()
+
+    def refresh_snip(self):
+        for w in self.snip_scroll.winfo_children(): w.destroy()
+        colors = cfg.get_theme_colors()
+
+        for key, data in cfg.snippets.snippets.items():
+            fr = ctk.CTkFrame(self.snip_scroll, fg_color=colors.get("history_bg"))
+            fr.pack(fill="x", pady=2, padx=5)
+
+            ctk.CTkLabel(fr, text=key, font=("Consolas", 14, "bold"), text_color=colors.get("accent_text"), width=100, anchor="w").pack(side="left", padx=10)
+            ctk.CTkLabel(fr, text=data['content'][:50], text_color=colors.get("text_color"), anchor="w").pack(side="left", fill="x", expand=True)
+
+            ctk.CTkButton(fr, text="🗑️", width=30, fg_color="transparent", text_color="red", hover_color=colors.get("frame_color"),
+                          command=lambda k=key: self.delete_snippet(k)).pack(side="right", padx=5)
+            ctk.CTkButton(fr, text="✏️", width=30, fg_color="transparent", text_color=colors.get("text_color"), hover_color=colors.get("frame_color"),
+                          command=lambda k=key: self.edit_snippet(k)).pack(side="right", padx=5)
+
+    def add_snippet_dialog(self):
+        self._snippet_dialog()
+
+    def edit_snippet(self, key):
+        data = cfg.snippets.snippets[key]
+        self._snippet_dialog(key, data['content'])
+
+    def delete_snippet(self, key):
+        cfg.snippets.remove_snippet(key)
+        self.refresh_snip()
+        self.status.configure(text=f"Usunięto snippet: {key}", text_color="red")
+
+    def _snippet_dialog(self, edit_key=None, edit_content=None):
+        d = ctk.CTkToplevel(self)
+        d.title("Edytor Snippetu")
+        d.geometry("400x300")
+        d.attributes("-topmost", True)
+
+        colors = cfg.get_theme_colors()
+        d.configure(fg_color=colors.get("fg_color"))
+
+        ctk.CTkLabel(d, text="Skrót (np. ;tel):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        ent_key = ctk.CTkEntry(d)
+        ent_key.pack(fill="x", padx=20, pady=5)
+        if edit_key: ent_key.insert(0, edit_key)
+
+        ctk.CTkLabel(d, text="Treść:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        txt_content = ctk.CTkTextbox(d, height=100)
+        txt_content.pack(fill="both", expand=True, padx=20, pady=5)
+        if edit_content: txt_content.insert("0.0", edit_content)
+
+        def save():
+            k = ent_key.get().strip()
+            c = txt_content.get("0.0", "end").strip()
+            if k and c:
+                if edit_key and edit_key != k:
+                    cfg.snippets.remove_snippet(edit_key) # Rename case
+                cfg.snippets.add_snippet(k, c)
+                self.refresh_snip()
+                d.destroy()
+
+        ctk.CTkButton(d, text="Zapisz", command=save, fg_color=colors.get("button_color")).pack(pady=10)
 
     # --- HISTORY ---
     def setup_hist(self):
@@ -423,7 +559,15 @@ class MainApp(ctk.CTk):
         # Stats Row
         self.c1 = self._stat_card(f, "Korekty", 0, 0, 0)
         self.c2 = self._stat_card(f, "Tłumaczenia", 0, 0, 1)
-        self.c3 = self._stat_card(f, "Słowa", 0, 0, 2)
+
+        # Words Card with Review Button
+        colors = cfg.get_theme_colors()
+        fr = ctk.CTkFrame(f, fg_color=colors.get("frame_color", "#333"))
+        fr.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
+        ctk.CTkLabel(fr, text="Słowa", text_color=colors.get("text_color")).pack(pady=5)
+        self.c3_val = ctk.CTkLabel(fr, text="0", font=("Arial", 26, "bold"), text_color=colors.get("accent_text"))
+        self.c3_val.pack(pady=2)
+        ctk.CTkButton(fr, text="⚡ Przegląd", height=20, width=80, fg_color=colors.get("button_color"), command=self.open_review_mode).pack(pady=5)
 
         # Test Zone (Moved here)
         self.setup_test_zone(f, row=1)
@@ -443,8 +587,36 @@ class MainApp(ctk.CTk):
     def refresh_dash(self):
         self.c1.configure(text=str(cfg.stats["corrected"]))
         self.c2.configure(text=str(cfg.stats["translated"]))
-        # Assuming we add word count later, placeholder for now
-        self.c3.configure(text=str(cfg.stats.get("words_corrected", 0)))
+        self.c3_val.configure(text=str(cfg.stats.get("words_corrected", 0)))
+
+    def open_review_mode(self):
+        # Gather potential reviews
+        to_review = []
+        seen = set()
+
+        # Iterate history
+        for entry in cfg.history:
+            if entry.get("diffs"):
+                for d in entry["diffs"]:
+                    old = d["old"]
+                    new = d["new"]
+                    # Skip if already in auto-replace or ignored
+                    if old in cfg.auto_replace.replacements: continue
+                    if old in cfg.auto_replace.ignored: continue
+
+                    pair = (old, new)
+                    if pair not in seen:
+                        seen.add(pair)
+                        to_review.append(pair)
+
+        if not to_review:
+            self.status.configure(text="Brak słówek do przeglądu!", text_color="yellow")
+            return
+
+        # Import dynamically to avoid circular import issues if placed at top inappropriately
+        # (though we refactored well, safe to use corr_gui)
+        from corr_gui import QuickReviewDialog
+        QuickReviewDialog(self, to_review)
 
     # --- SYSTEM ---
     def register_hotkeys(self):

@@ -55,12 +55,14 @@ class ConfigManager:
         self.history = []
         self.stats = {"corrected": 0, "translated": 0, "saved_time_s": 0, "words_corrected": 0}
         self.session_ignored = set()
+        self.user_profile = {"name": "Gość", "email": "", "photo": "", "logged_in": False}
 
         load_dotenv()
         self.env_key = os.getenv("GROQ_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
         self.load_config()
         self.load_history()
+        self.load_profile()
         self.auto_replace = AutoReplaceManager()
 
         if not self.config["api_key"] and self.env_key:
@@ -98,6 +100,17 @@ class ConfigManager:
     def save_config(self):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=4)
+
+    def load_profile(self):
+        if os.path.exists("profile.json"):
+            try:
+                with open("profile.json", "r", encoding="utf-8") as f:
+                    self.user_profile = json.load(f)
+            except: pass
+
+    def save_profile(self):
+        with open("profile.json", "w", encoding="utf-8") as f:
+            json.dump(self.user_profile, f, indent=4)
 
     def load_history(self):
         if os.path.exists(HISTORY_FILE):
@@ -168,4 +181,40 @@ class AutoReplaceManager:
             del self.replacements[word]
         self.save()
 
+class TextCleaner:
+    def clean(self, text):
+        # 1. Remove double spaces
+        text = " ".join(text.split())
+        # 2. Remove space before punctuation
+        text = text.replace(" ,", ",").replace(" .", ".").replace(" !", "!").replace(" ?", "?")
+        return text
+
+class SnippetManager:
+    def __init__(self):
+        self.file = "snippets.json"
+        self.snippets = {} # key: {content, type, hotkey}
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.file):
+            try:
+                with open(self.file, "r", encoding="utf-8") as f:
+                    self.snippets = json.load(f)
+            except: pass
+
+    def save(self):
+        with open(self.file, "w", encoding="utf-8") as f:
+            json.dump(self.snippets, f, indent=4, ensure_ascii=False)
+
+    def add_snippet(self, key, content, type="text", hotkey=None):
+        self.snippets[key] = {"content": content, "type": type, "hotkey": hotkey}
+        self.save()
+
+    def remove_snippet(self, key):
+        if key in self.snippets:
+            del self.snippets[key]
+            self.save()
+
 cfg = ConfigManager()
+cfg.cleaner = TextCleaner()
+cfg.snippets = SnippetManager()

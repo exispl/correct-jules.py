@@ -41,24 +41,32 @@ class ActionWorker:
             self.current_word = []
 
     def _perform_replace(self, word):
+        # 1. Check Auto-Replace
         replacements = cfg.auto_replace.replacements
         if word in replacements:
             correct = replacements[word]
-
-            # Wait a tiny bit to ensure 'space' was fully processed by the target app
-            time.sleep(0.05)
-
-            # Remove word + space
-            n_back = len(word) + 1
-            for _ in range(n_back):
-                keyboard.send('backspace')
-                time.sleep(0.005)
-
-            # Type correct word + space
-            keyboard.write(correct + " ")
-
-            # Notify GUI via queue about auto-correction
+            self._backspace_and_write(word, correct + " ")
             gui_queue.put(("STATUS", {"text": f"Auto-Korekta: {word} -> {correct}", "color": "#2CC985"}))
+            return
+
+        # 2. Check Snippets (e.g. ;mail)
+        snippets = cfg.snippets.snippets
+        if word in snippets:
+             content = snippets[word]['content']
+             self._backspace_and_write(word, content)
+             gui_queue.put(("STATUS", {"text": f"Snippet: {word}", "color": "#4aa3df"}))
+             return
+
+    def _backspace_and_write(self, old, new):
+        time.sleep(0.05)
+        n_back = len(old) + 1 # +1 for the space that triggered it
+        for _ in range(n_back):
+            keyboard.send('backspace')
+            time.sleep(0.005)
+
+        # Split new text by lines to handle multiline snippets correctly
+        # keyboard.write handles newlines usually well but explicitly is safer
+        keyboard.write(new)
 
     def trigger(self, action_type):
         threading.Thread(target=self._process, args=(action_type,), daemon=True).start()
