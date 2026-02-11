@@ -45,6 +45,18 @@ class ActionWorker:
         replacements = cfg.auto_replace.replacements
         if word in replacements:
             correct = replacements[word]
+
+            # Apply Text Cleaner (space before punctuation)
+            # We assume word correction is a single word or short phrase
+            # but if it has punctuation, cleaner will fix it.
+            # Example: "word ," -> "word," logic.
+            # Since we replace whole 'word' with 'correct', we can run cleaner on 'correct'
+            # But the user also wants to fix "word ," typed manually.
+            # Currently we only trigger on SPACE.
+
+            # Let's apply cleaner to the correction output just in case
+            correct = cfg.cleaner.clean(correct)
+
             self._backspace_and_write(word, correct + " ")
             gui_queue.put(("STATUS", {"text": f"Auto-Korekta: {word} -> {correct}", "color": "#2CC985"}))
             return

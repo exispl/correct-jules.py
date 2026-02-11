@@ -172,8 +172,11 @@ class MainApp(ctk.CTk):
         self.login_frame = ctk.CTkFrame(self, fg_color="black") # Overlay
         self.login_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
 
-        c = ctk.CTkFrame(self.login_frame, fg_color="#333", corner_radius=20)
-        c.place(relx=0.5, rely=0.5, anchor="center", width=400, height=300)
+        c = ctk.CTkFrame(self.login_frame, fg_color="#333", corner_radius=20, width=400, height=300)
+        c.place(relx=0.5, rely=0.5, anchor="center")
+
+        # Prevent frame from shrinking to fit content
+        c.pack_propagate(False)
 
         ctk.CTkLabel(c, text="AI Assistant Pro", font=("Arial", 24, "bold"), text_color="white").pack(pady=20)
         ctk.CTkLabel(c, text="Zaloguj się, aby synchronizować ustawienia", text_color="gray").pack()
