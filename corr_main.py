@@ -91,12 +91,12 @@ class MainApp(ctk.CTk):
 
         ctk.CTkLabel(input_label_frame, text="Wprowadź tekst:", text_color=colors.get("text_color")).pack(side="left")
 
-        # Tools Icons (Copy, Paste History) - Bigger Icons
-        ctk.CTkButton(input_label_frame, text="📋", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="white", font=("Arial", 16), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
+        # Tools Icons (Copy, Paste History) - Even Bigger Icons
+        ctk.CTkButton(input_label_frame, text="📋", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 20), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
 
-        ctk.CTkButton(input_label_frame, text="🗂️", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="white", font=("Arial", 16), command=self.trigger_win_v).pack(side="right", padx=5)
+        ctk.CTkButton(input_label_frame, text="🗂️", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 20), command=self.trigger_win_v).pack(side="right", padx=5)
 
         self.test_in = ctk.CTkTextbox(f, height=100, font=(cfg.config["font_family"], cfg.config["font_size"]),
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
@@ -124,8 +124,8 @@ class MainApp(ctk.CTk):
         output_label_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(10,0))
         ctk.CTkLabel(output_label_frame, text="Wynik:", text_color=colors.get("text_color")).pack(side="left")
 
-        ctk.CTkButton(output_label_frame, text="📋", width=40, height=30, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="white", font=("Arial", 16), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=5)
+        ctk.CTkButton(output_label_frame, text="📋", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 20), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=5)
 
         self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
         self.out_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)

@@ -59,11 +59,11 @@ class HistoryItem(ctk.CTkFrame):
         self.res_box = ctk.CTkTextbox(self.details, height=50, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
         self.res_box.pack(fill="x", padx=10, pady=2)
 
-        # Diff list
+        # Diff list - now with more visual punch
         if data['diffs']:
-            ctk.CTkLabel(self.details, text="Zmiany:", text_color=colors.get("accent_text"), font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
-            self.diff_box = ctk.CTkTextbox(self.details, height=80, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Consolas", 12))
-            self.diff_box.pack(fill="x", padx=10, pady=5)
+            ctk.CTkLabel(self.details, text="Zmiany (Słowo po słowie):", text_color=colors.get("accent_text"), font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+            self.diff_frame = ctk.CTkFrame(self.details, fg_color=colors.get("input_bg"))
+            self.diff_frame.pack(fill="x", padx=10, pady=5)
 
     def toggle(self, event=None):
         if self.expanded:
@@ -81,12 +81,23 @@ class HistoryItem(ctk.CTkFrame):
                 self.res_box.configure(state="disabled")
 
                 if self.data['diffs']:
-                    self.diff_box.configure(state="normal")
-                    self.diff_box.delete("0.0", "end")
+                    # Clear previous children if any (re-opening)
+                    for w in self.diff_frame.winfo_children(): w.destroy()
+
                     for d in self.data['diffs']:
-                        # Simple ASCII arrow representation as requested, or emojis
-                        self.diff_box.insert("end", f"🔴 '{d['old']}'  ➡  🟢 '{d['new']}'\n")
-                    self.diff_box.configure(state="disabled")
+                        row = ctk.CTkFrame(self.diff_frame, fg_color="transparent")
+                        row.pack(fill="x", pady=2)
+
+                        # Old Word (Red)
+                        ctk.CTkLabel(row, text=d['old'], text_color="#FF4747", font=("Consolas", 14, "bold"), width=120, anchor="e").pack(side="left")
+
+                        # Arrow
+                        ctk.CTkLabel(row, text="➡", font=("Arial", 14), width=30).pack(side="left")
+
+                        # New Word (Green)
+                        ctk.CTkLabel(row, text=d['new'], text_color="#2CC985", font=("Consolas", 14, "bold"), width=120, anchor="w").pack(side="left")
+
+                        # Context (fragment) - optional, can be complex to calculate index
 
             self.expanded = True
 
@@ -166,13 +177,15 @@ class QuickReviewDialog(ctk.CTkToplevel):
         self.card_frame = ctk.CTkFrame(self, fg_color=colors.get("frame_color"), corner_radius=15)
         self.card_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        self.lbl_bad = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 24, "bold"), text_color="#FF4747")
-        self.lbl_bad.pack(expand=True)
+        # Use Textbox for multi-line support if needed, but Label is cleaner for single words
+        # We will try dynamic font sizing in show_current
+        self.lbl_bad = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#FF4747", wraplength=380)
+        self.lbl_bad.pack(expand=True, pady=10)
 
-        ctk.CTkLabel(self.card_frame, text="⬇️", font=("Arial", 20)).pack()
+        ctk.CTkLabel(self.card_frame, text="⬇️", font=("Arial", 24)).pack()
 
-        self.lbl_good = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 24, "bold"), text_color="#2CC985")
-        self.lbl_good.pack(expand=True)
+        self.lbl_good = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#2CC985", wraplength=380)
+        self.lbl_good.pack(expand=True, pady=10)
 
         help_lbl = ctk.CTkLabel(self, text="[➡] Akceptuj   [⬅] Odrzuć   [⬇] Pomiń", text_color="gray", font=("Consolas", 10))
         help_lbl.pack(pady=10)
@@ -189,8 +202,18 @@ class QuickReviewDialog(ctk.CTkToplevel):
             return
 
         old, new = self.review_list[self.index]
-        self.lbl_bad.configure(text=old)
-        self.lbl_good.configure(text=new)
+
+        # Dynamic font sizing
+        # Base size 32. Reduce if long.
+        def get_size(text):
+            l = len(text)
+            if l < 10: return 40
+            if l < 20: return 32
+            if l < 30: return 24
+            return 18
+
+        self.lbl_bad.configure(text=old, font=("Arial", get_size(old), "bold"))
+        self.lbl_good.configure(text=new, font=("Arial", get_size(new), "bold"))
         self.lbl_counter.configure(text=f"{self.index + 1}/{len(self.review_list)}")
 
     def action_accept(self):
