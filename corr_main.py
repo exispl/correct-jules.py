@@ -18,8 +18,10 @@ class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AI Assistant Pro")
-        self.geometry("1000x700")
+        self.geometry("1200x800")
         self.protocol("WM_DELETE_WINDOW", self.hide_window)
+
+        self.update_theme()
 
         # Grid layout
         self.grid_columnconfigure(0, weight=1)
@@ -30,14 +32,12 @@ class MainApp(ctk.CTk):
 
         self.tabs = {
             "Dash": self.tabview.add("Dashboard"),
-            "Test": self.tabview.add("Strefa Testowa"),
             "Hist": self.tabview.add("Historia"),
             "Sett": self.tabview.add("Ustawienia"),
         }
 
         # Init Modules
         self.setup_dash()
-        self.setup_test()
         self.setup_hist()
         self.setup_sett()
 
@@ -67,67 +67,116 @@ class MainApp(ctk.CTk):
         except queue.Empty: pass
         finally: self.after(200, self.check_queue)
 
-    # --- TEST ZONE (BUBBLES) ---
-    def setup_test(self):
-        f = self.tabs["Test"]
+    # --- TEST ZONE (DASHBOARD) ---
+    def setup_test_zone(self, parent, row):
+        parent.grid_rowconfigure(row, weight=1)
+        colors = cfg.get_theme_colors()
+
+        # Container
+        f = ctk.CTkFrame(parent, fg_color="transparent")
+        f.grid(row=row, column=0, columnspan=3, sticky="nsew", padx=10, pady=5)
         f.grid_columnconfigure(0, weight=1)
-        f.grid_rowconfigure(1, weight=1) # Output area expands
+        f.grid_rowconfigure(2, weight=1) # Output expands
 
-        # Input Area (Auto-expanding logic via weight)
-        self.test_in = ctk.CTkTextbox(f, height=80, font=(cfg.config["font_family"], cfg.config["font_size"]))
-        self.test_in.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
-        self.test_in.bind("<KeyRelease>", self.auto_resize_input)
+        # Input Area
+        input_label_frame = ctk.CTkFrame(f, fg_color="transparent")
+        input_label_frame.grid(row=0, column=0, sticky="ew", padx=5)
 
-        # Action Bar
+        ctk.CTkLabel(input_label_frame, text="Wprowadź tekst:", text_color=colors.get("text_color")).pack(side="left")
+
+        # Tools Icons (Copy, Paste History)
+        ctk.CTkButton(input_label_frame, text="📋", width=30, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
+                      text_color=colors.get("text_color"), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=2)
+
+        ctk.CTkButton(input_label_frame, text="🗂️ Win+V", width=60, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
+                      text_color=colors.get("text_color"), command=self.trigger_win_v).pack(side="right", padx=2)
+
+        self.test_in = ctk.CTkTextbox(f, height=100, font=(cfg.config["font_family"], cfg.config["font_size"]),
+                                      fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
+        self.test_in.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+
+        # Action Buttons Frame
         btn_frame = ctk.CTkFrame(f, fg_color="transparent")
-        btn_frame.grid(row=1, column=0, pady=5)
-        self.btn_check = ctk.CTkButton(btn_frame, text="✨ SPRAWDŹ (AI)", command=self.run_test, width=200, height=40, font=("Arial", 14, "bold"))
-        self.btn_check.pack()
+        btn_frame.grid(row=1, column=1, sticky="nw", padx=5, pady=5)
 
-        # Output Area (Rich Text with Bubbles)
-        # Używamy zwykłego Text z tkintera wewnątrz ramki CTk, bo CTkTextbox słabo obsługuje window_create
-        self.out_frame = ctk.CTkFrame(f)
-        self.out_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
+        actions = [
+            ("✨ Korekta", "CORRECT"),
+            ("🌍 Tłumacz", "TRANSLATE"),
+            ("📝 Streszcz", "SUMMARIZE"),
+            ("👔 Ton", "TONE_CHANGE"),
+            ("💡 Wyjaśnij", "EXPLAIN")
+        ]
 
-        self.out_text = tk.Text(self.out_frame, bg="#2b2b2b", fg="white", font=(cfg.config["font_family"], cfg.config["font_size"]),
+        for label, code in actions:
+            ctk.CTkButton(btn_frame, text=label, width=120, fg_color=colors.get("button_color"),
+                          hover_color=colors.get("button_hover"), text_color="white",
+                          command=lambda c=code: self.run_dashboard_action(c)).pack(pady=2)
+
+        # Output Area
+        output_label_frame = ctk.CTkFrame(f, fg_color="transparent")
+        output_label_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(10,0))
+        ctk.CTkLabel(output_label_frame, text="Wynik:", text_color=colors.get("text_color")).pack(side="left")
+
+        ctk.CTkButton(output_label_frame, text="📋", width=30, height=20, fg_color="transparent", hover_color=colors.get("frame_color"),
+                      text_color=colors.get("text_color"), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=2)
+
+        self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
+        self.out_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+
+        self.out_text = tk.Text(self.out_frame, bg=colors.get("history_bg"), fg=colors.get("text_color"),
+                                font=(cfg.config["font_family"], cfg.config["font_size"]),
                                 relief="flat", wrap="word", padx=10, pady=10)
         self.out_text.pack(fill="both", expand=True)
 
         # Context Menu
-        self.menu = tk.Menu(self, tearoff=0, bg="#333", fg="white")
+        self.menu = tk.Menu(self, tearoff=0, bg=colors.get("frame_color"), fg=colors.get("text_color"))
 
-    def auto_resize_input(self, event):
-        # Prosta logika: im więcej linii, tym wyższy widget (do limitu)
-        lines = int(self.test_in.index('end-1c').split('.')[0])
-        new_h = min(max(80, lines * 25), 200)
-        if self.test_in.cget("height") != new_h:
-            self.test_in.configure(height=new_h)
+    def copy_to_clipboard(self, widget):
+        try:
+            txt = widget.get("0.0", "end").strip()
+            pyperclip.copy(txt)
+            self.status.configure(text="Skopiowano do schowka!", text_color="green")
+        except: pass
 
-    def run_test(self):
+    def trigger_win_v(self):
+        keyboard.send('windows+v')
+        self.status.configure(text="Otwarto historię schowka (Win+V)", text_color=colors.get("accent_text"))
+
+    def run_dashboard_action(self, action_code):
         txt = self.test_in.get("0.0", "end").strip()
         if not txt: return
-        self.status.configure(text="AI pracuje...", text_color="yellow")
-        self.btn_check.configure(state="disabled")
-        threading.Thread(target=self._thread_test, args=(txt,), daemon=True).start()
+        self.status.configure(text=f"AI pracuje ({action_code})...", text_color="yellow")
+        threading.Thread(target=self._thread_test, args=(txt, action_code), daemon=True).start()
 
-    def _thread_test(self, txt):
+    def _thread_test(self, txt, action_code):
         try:
-            res, dur = ai.process_text("CORRECT", txt)
+            res, dur = ai.process_text(action_code, txt)
             if res:
-                self.after(0, lambda: self.render_bubbles(txt, res))
+                # If Correct or Tone Change, show bubbles
+                if action_code in ["CORRECT", "TONE_CHANGE"]:
+                    self.after(0, lambda: self.render_bubbles(txt, res, action_code))
+                else:
+                    # Just show text for Translate, Summarize, Explain
+                    self.after(0, lambda: self.render_text(res))
             else:
                 gui_queue.put(("STATUS", {"text": f"Błąd: {dur}", "color": "red"}))
         finally:
-            self.after(0, lambda: self.btn_check.configure(state="normal"))
+            self.after(0, lambda: self.status.configure(text="Gotowe.", text_color="green"))
 
-    def render_bubbles(self, original, result):
-        self.status.configure(text="Gotowe.", text_color="green")
+    def render_text(self, text):
+        self.out_text.delete("1.0", "end")
+        self.out_text.insert("end", text)
+        cfg.add_history_entry("OTHER", "", text, 0)
+
+    def render_bubbles(self, original, result, action_type="CORRECT"):
         self.out_text.delete("1.0", "end")
 
         # Tokenizacja słowna
         orig_words = original.split()
         res_words = result.split()
         matcher = difflib.SequenceMatcher(None, orig_words, res_words)
+
+        diffs = []
 
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == 'equal':
@@ -148,39 +197,63 @@ class MainApp(ctk.CTk):
                 self.out_text.window_create("end", window=btn)
                 self.out_text.insert("end", " ") # spacja po chmurce
 
+                if old_phrase:
+                    diffs.append({"old": old_phrase, "new": new_phrase})
+
         # Zapisz do historii
-        cfg.add_history_entry("TEST", original, result, 0) # 0 bo nie mierzymy tu czasu sieci
+        cfg.add_history_entry(action_type, original, result, 0, diffs=diffs)
 
     def show_bubble_menu(self, event, btn):
         self.menu.delete(0, "end")
 
+        new_text = btn.cget('text')
+        old_text = btn.original_text
+
         # 1. Sugestia AI (Domyślna)
-        self.menu.add_command(label=f"✅ {btn.cget('text')} (Zatwierdź)",
-                              command=lambda: self.resolve_bubble(btn, btn.cget('text')))
+        self.menu.add_command(label=f"✅ Akceptuj: '{new_text}'",
+                              command=lambda: self.resolve_bubble(btn, new_text))
+
+        # 2. Auto-Replace
+        if old_text:
+             self.menu.add_command(label=f"⚡ Dodaj do Auto-Replace: '{old_text}' -> '{new_text}'",
+                              command=lambda: self.add_to_autoreplace(btn, old_text, new_text))
 
         self.menu.add_separator()
 
-        # 2. Przywróć oryginał (jeśli był)
-        if btn.original_text:
-            self.menu.add_command(label=f"↩️ Przywróć: '{btn.original_text}'",
-                                  command=lambda: self.resolve_bubble(btn, btn.original_text, is_revert=True))
+        # 3. Przywróć oryginał (jeśli był)
+        if old_text:
+            self.menu.add_command(label=f"↩️ Przywróć: '{old_text}'",
+                                  command=lambda: self.resolve_bubble(btn, old_text, is_revert=True))
 
-        # 3. Edycja
+            # 4. Ignoruj na zawsze
+            self.menu.add_command(label=f"🚫 Ignoruj '{old_text}' (Nigdy nie zmieniaj)",
+                                  command=lambda: self.ignore_word(btn, old_text))
+
+        # 5. Edycja
+        self.menu.add_separator()
         self.menu.add_command(label="✏️ Edytuj ręcznie...", command=lambda: self.manual_bubble_edit(btn))
 
         self.menu.tk_popup(event.x_root, event.y_root)
 
     def resolve_bubble(self, btn, text, is_revert=False):
-        # Zamień widget na zwykły tekst
-        # Musimy znaleźć indeks widgetu w tk.Text. To jest trudne.
-        # Łatwiej: Po prostu nadpisz wygląd przycisku, żeby wyglądał jak tekst (hack)
-        # ALBO: Nie usuwajmy go, tylko zmieńmy kolor na przezroczysty/szary.
+        colors = cfg.get_theme_colors()
+        txt_col = colors.get("text_color")
 
         if is_revert:
-            btn.configure(text=text, fg_color="transparent", hover=False, text_color="white")
+            btn.configure(text=text, fg_color="transparent", hover=False, text_color=txt_col)
         else:
-            # Zatwierdzone - "rozpakuj" chmurkę wizualnie (zdejmij tło)
-            btn.configure(fg_color="transparent", hover=False, text_color="white")
+            # Zatwierdzone
+            btn.configure(fg_color="transparent", hover=False, text_color=txt_col)
+
+    def add_to_autoreplace(self, btn, old, new):
+        cfg.auto_replace.add_replacement(old, new)
+        self.resolve_bubble(btn, new)
+        self.status.configure(text=f"Dodano do Auto-Replace: {old} -> {new}", text_color="green")
+
+    def ignore_word(self, btn, old):
+        cfg.auto_replace.add_ignore(old)
+        self.resolve_bubble(btn, old, is_revert=True)
+        self.status.configure(text=f"Zignorowano: {old}", text_color="yellow")
 
     def manual_bubble_edit(self, btn):
         d = ctk.CTkInputDialog(text="Wpisz poprawną wersję:", title="Edycja")
@@ -222,8 +295,13 @@ class MainApp(ctk.CTk):
         # --- Appearance ---
         ctk.CTkLabel(f, text="Wygląd", font=("Arial", 14, "bold")).pack(anchor="w", padx=10, pady=(20,5))
 
+        ctk.CTkLabel(f, text="Motyw:").pack(anchor="w", padx=20)
+        self.combo_theme = ctk.CTkComboBox(f, values=["Dark", "Light", "Creamy"], width=300, command=self.change_theme_live)
+        self.combo_theme.set(cfg.config.get("theme", "Dark"))
+        self.combo_theme.pack(anchor="w", padx=20, pady=5)
+
         ctk.CTkLabel(f, text="Czcionka interfejsu:").pack(anchor="w", padx=20)
-        self.combo_font = ctk.CTkComboBox(f, values=FONTS, width=300)
+        self.combo_font = ctk.CTkComboBox(f, values=FONTS, width=300, command=self.change_font_live)
         self.combo_font.set(cfg.config["font_family"])
         self.combo_font.pack(anchor="w", padx=20, pady=5)
 
@@ -268,10 +346,31 @@ class MainApp(ctk.CTk):
         ctk.CTkButton(b_frame, text="Zapisz ustawienia", command=self.save_sett, fg_color="#2CC985", text_color="black").pack(side="left", padx=10)
         ctk.CTkButton(b_frame, text="Restart Aplikacji", command=self.restart_app, fg_color="#FF4747").pack(side="left", padx=10)
 
+    def change_theme_live(self, choice):
+        cfg.config["theme"] = choice
+        self.update_theme()
+        # Full refresh might be needed for some colors, but let's try basic
+        self.refresh_dash()
+
+    def change_font_live(self, choice):
+        cfg.config["font_family"] = choice
+        # Font changes usually require restart or traversing all widgets.
+        # For simplicity, we just save config, but user might need restart for full effect.
+
+    def update_theme(self):
+        t = cfg.config.get("theme", "Dark")
+        if t == "Light": ctk.set_appearance_mode("Light")
+        else: ctk.set_appearance_mode("Dark")
+
+        # Apply colors to window
+        colors = cfg.get_theme_colors()
+        self.configure(fg_color=colors.get("fg_color"))
+
     def save_sett(self):
         cfg.config["api_key"] = self.ent_api.get()
         cfg.config["model"] = self.combo_model.get()
         cfg.config["font_family"] = self.combo_font.get()
+        cfg.config["theme"] = self.combo_theme.get()
 
         # Save prompts
         new_prompts = {}
@@ -319,20 +418,33 @@ class MainApp(ctk.CTk):
     # --- DASHBOARD ---
     def setup_dash(self):
         f = self.tabs["Dash"]
-        f.grid_columnconfigure((0,1), weight=1)
+        f.grid_columnconfigure((0,1,2), weight=1) # 3 columns for stats
+
+        # Stats Row
         self.c1 = self._stat_card(f, "Korekty", 0, 0, 0)
         self.c2 = self._stat_card(f, "Tłumaczenia", 0, 0, 1)
+        self.c3 = self._stat_card(f, "Słowa", 0, 0, 2)
+
+        # Test Zone (Moved here)
+        self.setup_test_zone(f, row=1)
+
         self.refresh_dash()
 
     def _stat_card(self, p, t, v, r, c):
-        fr = ctk.CTkFrame(p, fg_color="#333"); fr.grid(row=r, column=c, padx=10, pady=10, sticky="ew")
-        ctk.CTkLabel(fr, text=t).pack(pady=5)
-        l = ctk.CTkLabel(fr, text=str(v), font=("Arial", 22, "bold"), text_color="#2CC985"); l.pack(pady=5)
+        colors = cfg.get_theme_colors()
+        fr = ctk.CTkFrame(p, fg_color=colors.get("frame_color", "#333"))
+        fr.grid(row=r, column=c, padx=10, pady=10, sticky="ew")
+
+        ctk.CTkLabel(fr, text=t, text_color=colors.get("text_color")).pack(pady=5)
+        l = ctk.CTkLabel(fr, text=str(v), font=("Arial", 26, "bold"), text_color=colors.get("accent_text"))
+        l.pack(pady=5)
         return l
 
     def refresh_dash(self):
         self.c1.configure(text=str(cfg.stats["corrected"]))
         self.c2.configure(text=str(cfg.stats["translated"]))
+        # Assuming we add word count later, placeholder for now
+        self.c3.configure(text=str(cfg.stats.get("words_corrected", 0)))
 
     # --- SYSTEM ---
     def register_hotkeys(self):

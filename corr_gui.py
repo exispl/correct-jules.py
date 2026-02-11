@@ -10,9 +10,12 @@ from corr_config import cfg, gui_queue
 class BubbleButton(ctk.CTkButton):
     """Przycisk udający tag HTML (chmurkę)"""
     def __init__(self, parent, text, original_text, command=None, **kwargs):
+        colors = cfg.get_theme_colors()
         font_cfg = (cfg.config["font_family"], cfg.config["font_size"] - 2)
         super().__init__(parent, text=text, font=font_cfg,
-                         fg_color="#00695c", hover_color="#004d40",
+                         fg_color=colors.get("bubble_bg", "#00695c"),
+                         hover_color=colors.get("bubble_hover", "#004d40"),
+                         text_color="white", # Contrast text for buttons usually white
                          height=24, corner_radius=12, width=len(text)*10 + 20,
                          command=command, **kwargs)
         self.original_text = original_text
@@ -20,8 +23,10 @@ class BubbleButton(ctk.CTkButton):
 class HistoryItem(ctk.CTkFrame):
     """Zwijany element historii"""
     def __init__(self, parent, data):
-        super().__init__(parent, fg_color="#2b2b2b", corner_radius=6)
+        colors = cfg.get_theme_colors()
+        super().__init__(parent, fg_color=colors.get("history_bg"), corner_radius=6)
         self.data = data
+        self.colors = colors
         self.expanded = False
 
         # Header
@@ -29,28 +34,35 @@ class HistoryItem(ctk.CTkFrame):
         self.header.pack(fill="x", padx=5, pady=5)
         self.header.bind("<Button-1>", self.toggle)
 
-        type_color = "#2CC985" if data['type'] == "CORRECT" else "#4aa3df"
-        ctk.CTkLabel(self.header, text=f"[{data['type']}]", text_color=type_color, width=60, font=("Consolas", 11, "bold")).pack(side="left")
+        type_color = colors.get("accent_text", "#2CC985")
+        ctk.CTkLabel(self.header, text=f"[{data['type']}]", text_color=type_color, width=80, font=("Consolas", 12, "bold")).pack(side="left")
 
-        summary = data['result'][:50] + "..." if len(data['result']) > 50 else data['result']
-        self.lbl_summary = ctk.CTkLabel(self.header, text=summary, anchor="w", cursor="hand2")
+        summary = data['result'][:60] + "..." if len(data['result']) > 60 else data['result']
+        self.lbl_summary = ctk.CTkLabel(self.header, text=summary, anchor="w", cursor="hand2", text_color=colors.get("text_color"))
         self.lbl_summary.pack(side="left", fill="x", expand=True, padx=5)
         self.lbl_summary.bind("<Button-1>", self.toggle)
 
-        ctk.CTkLabel(self.header, text=data['time'][11:16], text_color="gray").pack(side="right")
+        # Date & Time
+        dt_str = f"{data['time']}" # Full date
+        ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 10)).pack(side="right")
 
         # Details (hidden by default)
-        self.details = ctk.CTkFrame(self, fg_color="#202020")
+        self.details = ctk.CTkFrame(self, fg_color="transparent")
 
-        # Original vs Result
-        ctk.CTkLabel(self.details, text="Oryginał:", text_color="gray", font=("Arial", 10)).pack(anchor="w", padx=10, pady=(5,0))
-        ctk.CTkTextbox(self.details, height=60, fg_color="#1a1a1a").pack(fill="x", padx=10, pady=2)
-        # (Wstawianie tekstu zrobimy przy rozwijaniu żeby nie mulić startu)
+        # Original
+        ctk.CTkLabel(self.details, text="Oryginał:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+        self.orig_box = ctk.CTkTextbox(self.details, height=50, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        self.orig_box.pack(fill="x", padx=10, pady=2)
 
-        # Lista zmian
+        # Result
+        ctk.CTkLabel(self.details, text="Wynik:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+        self.res_box = ctk.CTkTextbox(self.details, height=50, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        self.res_box.pack(fill="x", padx=10, pady=2)
+
+        # Diff list
         if data['diffs']:
-            ctk.CTkLabel(self.details, text="Zmiany:", text_color="#ffcc00", font=("Arial", 10)).pack(anchor="w", padx=10, pady=(5,0))
-            self.diff_box = ctk.CTkTextbox(self.details, height=80, fg_color="#1a1a1a")
+            ctk.CTkLabel(self.details, text="Zmiany:", text_color=colors.get("accent_text"), font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+            self.diff_box = ctk.CTkTextbox(self.details, height=80, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Consolas", 12))
             self.diff_box.pack(fill="x", padx=10, pady=5)
 
     def toggle(self, event=None):
@@ -61,16 +73,19 @@ class HistoryItem(ctk.CTkFrame):
             self.details.pack(fill="x", padx=5, pady=5)
 
             # Populate textboxes only when expanded
-            orig_box = self.details.winfo_children()[1]
-            if orig_box.get("0.0", "end").strip() == "":
-                orig_box.insert("0.0", self.data['original'])
-                orig_box.configure(state="disabled")
+            if self.orig_box.get("0.0", "end").strip() == "":
+                self.orig_box.insert("0.0", self.data['original'])
+                self.orig_box.configure(state="disabled")
+
+                self.res_box.insert("0.0", self.data['result'])
+                self.res_box.configure(state="disabled")
 
                 if self.data['diffs']:
                     self.diff_box.configure(state="normal")
                     self.diff_box.delete("0.0", "end")
                     for d in self.data['diffs']:
-                        self.diff_box.insert("end", f"🔴 {d['old']}  ->  🟢 {d['new']}\n")
+                        # Simple ASCII arrow representation as requested, or emojis
+                        self.diff_box.insert("end", f"🔴 '{d['old']}'  ➡  🟢 '{d['new']}'\n")
                     self.diff_box.configure(state="disabled")
 
             self.expanded = True

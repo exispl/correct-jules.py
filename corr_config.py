@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "hotkey_tone": "ctrl+F9",
     "hotkey_explain": "ctrl+F10",
     "font_family": "Segoe UI",
-    "font_size": 16,
+    "font_size": 18,
     "theme": "Dark",
     "prompts": {
         "CORRECT": "Jesteś ekspertem językowym. Popraw błędy w tekście. Zwróć TYLKO poprawiony tekst.",
@@ -53,7 +53,7 @@ class ConfigManager:
     def __init__(self):
         self.config = DEFAULT_CONFIG.copy()
         self.history = []
-        self.stats = {"corrected": 0, "translated": 0, "saved_time_s": 0}
+        self.stats = {"corrected": 0, "translated": 0, "saved_time_s": 0, "words_corrected": 0}
         self.session_ignored = set()
 
         load_dotenv()
@@ -61,9 +61,31 @@ class ConfigManager:
 
         self.load_config()
         self.load_history()
+        self.auto_replace = AutoReplaceManager()
 
         if not self.config["api_key"] and self.env_key:
             self.config["api_key"] = self.env_key
+
+        self.load_themes()
+
+    def load_themes(self):
+        try:
+            with open("themes.json", "r", encoding="utf-8") as f:
+                self.themes = json.load(f)
+        except Exception:
+            self.themes = {} # Fallback
+
+    def get_theme_colors(self):
+        theme_name = self.config.get("theme", "Dark")
+        if theme_name in self.themes:
+            return self.themes[theme_name]
+        # Default Dark theme fallback if json missing
+        return {
+            "fg_color": "#212121", "text_color": "white", "frame_color": "#333333",
+            "button_color": "#2CC985", "button_hover": "#25A56D", "accent_text": "#2CC985",
+            "bubble_bg": "#00695c", "bubble_hover": "#004d40", "input_bg": "#1a1a1a",
+            "history_bg": "#2b2b2b"
+        }
 
     def load_config(self):
         if os.path.exists(CONFIG_FILE):
@@ -105,7 +127,45 @@ class ConfigManager:
 
         if type_str == "CORRECT": self.stats["corrected"] += 1
         elif type_str == "TRANSLATE": self.stats["translated"] += 1
+
+        # Count words corrected
+        if diffs:
+            self.stats["words_corrected"] = self.stats.get("words_corrected", 0) + len(diffs)
+
         self.stats["saved_time_s"] += duration
         self.save_history()
+
+class AutoReplaceManager:
+    def __init__(self):
+        self.file = "auto_replace.json"
+        self.replacements = {}
+        self.ignored = []
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.file):
+            try:
+                with open(self.file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.replacements = data.get("replacements", {})
+                    self.ignored = data.get("ignored", [])
+            except: pass
+
+    def save(self):
+        with open(self.file, "w", encoding="utf-8") as f:
+            json.dump({"replacements": self.replacements, "ignored": self.ignored}, f, indent=4, ensure_ascii=False)
+
+    def add_replacement(self, error, correct):
+        if error.lower() == correct.lower(): return
+        self.replacements[error] = correct
+        if error in self.ignored: self.ignored.remove(error)
+        self.save()
+
+    def add_ignore(self, word):
+        if word not in self.ignored:
+            self.ignored.append(word)
+        if word in self.replacements:
+            del self.replacements[word]
+        self.save()
 
 cfg = ConfigManager()
