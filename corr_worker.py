@@ -11,9 +11,6 @@ class ActionWorker:
         self.start_auto_replace_listener()
 
     def start_auto_replace_listener(self):
-        threading.Thread(target=self._auto_replace_loop, daemon=True).start()
-
-    def start_auto_replace_listener(self):
         # Only start if enabled, but for now we run it always or check flag inside
         self.tracking_enabled = True
         self.current_word = []

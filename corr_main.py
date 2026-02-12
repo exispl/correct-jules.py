@@ -7,6 +7,7 @@ import difflib
 import keyboard
 import pystray
 from PIL import Image, ImageDraw
+import os
 
 from corr_config import cfg, gui_queue, FONTS
 from corr_ai import ai
