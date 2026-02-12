@@ -161,7 +161,7 @@ class MainApp(ctk.CTk):
         self.test_in.grid(row=0, column=0, pady=5)
 
         # Focus input by default
-        self.after(200, lambda: self.test_in.focus_set())
+        self.after(500, lambda: self.test_in.focus_set())
 
         # 3. Paste Buttons
         action_area = ctk.CTkFrame(f, fg_color="transparent")
@@ -171,13 +171,16 @@ class MainApp(ctk.CTk):
         paste_frame = ctk.CTkFrame(action_area, fg_color="transparent")
         paste_frame.pack(pady=10)
 
-        btn_paste = ctk.CTkButton(paste_frame, text="WKLEJ TEKST", width=200, height=60,
-                                  font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
+        # Smaller, light gray buttons
+        paste_bg = "#d0d0d0" if colors.get("theme") != "Dark" else "#404040"
+
+        btn_paste = ctk.CTkButton(paste_frame, text="WKLEJ TEKST", width=160, height=40,
+                                  font=("Arial", 14), fg_color=paste_bg, text_color="black" if colors.get("theme")!="Dark" else "white",
                                   command=lambda: self.paste_to_input())
         btn_paste.pack(side="left", padx=40)
 
-        btn_hist = ctk.CTkButton(paste_frame, text="HISTORIA (Win+V)", width=200, height=60,
-                                 font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
+        btn_hist = ctk.CTkButton(paste_frame, text="HISTORIA (Win+V)", width=160, height=40,
+                                 font=("Arial", 14), fg_color=paste_bg, text_color="black" if colors.get("theme")!="Dark" else "white",
                                  command=self.trigger_win_v)
         btn_hist.pack(side="left", padx=40)
 
@@ -185,24 +188,43 @@ class MainApp(ctk.CTk):
         act_frame = ctk.CTkFrame(action_area, fg_color="transparent")
         act_frame.pack(pady=10)
 
-        def mk_btn(parent, txt, code):
-            b = ctk.CTkButton(parent, text=txt, command=lambda: self.run_dashboard_action(code),
-                                 font=font_lato, width=220, height=50,
-                                 fg_color=colors.get("button_color"), text_color="black")
-            # Bind Right Click for disable menu
-            b.bind("<Button-3>", lambda e, c=code: self.show_disable_menu(e, c))
-            return b
+        def mk_btn(parent, txt, code, shortcut_hint=""):
+            # Frame as Button wrapper to support two font sizes
+            btn_frame = ctk.CTkFrame(parent, width=220, height=55, fg_color=colors.get("button_color"), corner_radius=6)
+            # Prevent shrinking
+            btn_frame.pack_propagate(False)
+
+            # Inner Labels
+            l_main = ctk.CTkLabel(btn_frame, text=txt, font=font_lato, text_color="black")
+            l_main.pack(pady=(5,0))
+
+            if shortcut_hint:
+                l_sub = ctk.CTkLabel(btn_frame, text=shortcut_hint, font=("Arial", 10), text_color="#333333")
+                l_sub.pack(pady=(0,2))
+
+            # Click bindings
+            def on_click(e): self.run_dashboard_action(code)
+            def on_right(e): self.show_disable_menu(e, code)
+
+            for w in [btn_frame, l_main] + ([l_sub] if shortcut_hint else []):
+                w.bind("<Button-1>", on_click)
+                w.bind("<Button-3>", on_right)
+                # Hover effect simulation (simple)
+                w.bind("<Enter>", lambda e, f=btn_frame: f.configure(fg_color=colors.get("button_hover")))
+                w.bind("<Leave>", lambda e, f=btn_frame: f.configure(fg_color=colors.get("button_color")))
+
+            return btn_frame
 
         r1 = ctk.CTkFrame(act_frame, fg_color="transparent")
         r1.pack(pady=5)
-        mk_btn(r1, "KOREKTA", "CORRECT").pack(side="left", padx=10)
-        mk_btn(r1, "TŁUMACZ", "TRANSLATE").pack(side="left", padx=10)
+        mk_btn(r1, "KOREKTA", "CORRECT", cfg.config.get("hotkey_correct", "")).pack(side="left", padx=10)
+        mk_btn(r1, "TŁUMACZ", "TRANSLATE", cfg.config.get("hotkey_translate", "")).pack(side="left", padx=10)
 
         r2 = ctk.CTkFrame(act_frame, fg_color="transparent")
         r2.pack(pady=5)
-        mk_btn(r2, "STRESZCZENIE", "SUMMARIZE").pack(side="left", padx=10)
-        mk_btn(r2, "ZMIANA TONU", "TONE_CHANGE").pack(side="left", padx=10)
-        mk_btn(r2, "WYJAŚNIENIE", "EXPLAIN").pack(side="left", padx=10)
+        mk_btn(r2, "STRESZCZENIE", "SUMMARIZE", cfg.config.get("hotkey_summarize", "")).pack(side="left", padx=10)
+        mk_btn(r2, "ZMIANA TONU", "TONE_CHANGE", cfg.config.get("hotkey_tone", "")).pack(side="left", padx=10)
+        mk_btn(r2, "WYJAŚNIENIE", "EXPLAIN", cfg.config.get("hotkey_explain", "")).pack(side="left", padx=10)
 
         # 5. Output Area
         self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
@@ -712,6 +734,13 @@ class MainApp(ctk.CTk):
         self.combo_font.set(cfg.config["font_family"])
         self.combo_font.pack(anchor="w", padx=20, pady=5)
 
+        ctk.CTkLabel(f, text="Rozmiar czcionki:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        self.slider_font_size = ctk.CTkSlider(f, from_=10, to=30, number_of_steps=20, width=300, command=self.change_font_size_live)
+        self.slider_font_size.set(cfg.config.get("font_size", 18))
+        self.slider_font_size.pack(anchor="w", padx=20, pady=5)
+        self.lbl_font_size = ctk.CTkLabel(f, text=f"{int(cfg.config.get('font_size', 18))} px", text_color="gray")
+        self.lbl_font_size.pack(anchor="w", padx=20)
+
         # Hotkeys
         ctk.CTkLabel(f, text="Skróty Klawiszowe (Kliknij by zmienić)", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(20,5))
 
@@ -798,6 +827,14 @@ class MainApp(ctk.CTk):
         cfg.config["font_family"] = choice
         self.ask_restart("Zmiana czcionki wymaga restartu. Czy zrestartować teraz?")
 
+    def change_font_size_live(self, val):
+        size = int(val)
+        self.lbl_font_size.configure(text=f"{size} px")
+        cfg.config["font_size"] = size
+        # We don't save immediately on slide to avoid disk spam, but save on 'Zapisz' button
+        # However, user might expect immediate effect? Not easy without full reload.
+        # Just update config in memory, save button will persist.
+
     def ask_restart(self, msg):
         import tkinter.messagebox
         if tkinter.messagebox.askyesno("Restart", msg):
@@ -814,6 +851,7 @@ class MainApp(ctk.CTk):
         cfg.config["api_key"] = self.ent_api.get()
         cfg.config["model"] = self.combo_model.get()
         cfg.config["font_family"] = self.combo_font.get()
+        cfg.config["font_size"] = int(self.slider_font_size.get())
         cfg.config["theme"] = self.combo_theme.get()
 
         new_prompts = {}

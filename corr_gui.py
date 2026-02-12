@@ -70,23 +70,23 @@ class HistoryItem(ctk.CTkFrame):
 
         # Date & Time
         dt_str = f"{data['time']}" # Full date
-        ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 10)).pack(side="right", padx=5)
+        ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 20, "bold")).pack(side="right", padx=10)
 
         # Delete Button (Trash Icon - Larger)
-        ctk.CTkButton(self.header, text="🗑️", width=40, height=40, font=("Arial", 20), fg_color="transparent", hover_color=colors.get("bubble_hover"),
+        ctk.CTkButton(self.header, text="🗑️", width=50, height=50, font=("Arial", 30), fg_color="transparent", hover_color=colors.get("bubble_hover"),
                       text_color="red", command=self.delete_me).pack(side="right", padx=5)
 
         # Details (hidden by default)
         self.details = ctk.CTkFrame(self, fg_color="transparent")
 
         # Original
-        ctk.CTkLabel(self.details, text="Oryginał:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
-        self.orig_box = ctk.CTkTextbox(self.details, height=100, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        ctk.CTkLabel(self.details, text="Oryginał:", text_color="gray", font=("Arial", 14, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+        self.orig_box = ctk.CTkTextbox(self.details, height=150, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 14))
         self.orig_box.pack(fill="x", padx=10, pady=2)
 
         # Result
-        ctk.CTkLabel(self.details, text="Wynik:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
-        self.res_box = ctk.CTkTextbox(self.details, height=100, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        ctk.CTkLabel(self.details, text="Wynik:", text_color="gray", font=("Arial", 14, "bold")).pack(anchor="w", padx=10, pady=(5,0))
+        self.res_box = ctk.CTkTextbox(self.details, height=150, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 14))
         self.res_box.pack(fill="x", padx=10, pady=2)
 
         # Diff list - now with more visual punch
@@ -115,6 +115,36 @@ class HistoryItem(ctk.CTkFrame):
                 self.orig_box.configure(state="disabled")
 
                 self.res_box.insert("0.0", self.data['result'])
+
+                # Apply Green Tag for Corrections
+                # We need to find the new words in result text.
+                # Ideally we have indices or we search. Since we have diffs with 'new' text...
+                if self.data['diffs']:
+                    self.res_box.tag_config("correct", foreground="#2CC985", font=("Arial", 14, "bold"))
+
+                    # Simple highlighting logic: find first occurrence of 'new' phrase that matches context?
+                    # Result text is constructed from diffs.
+                    # Let's iterate diffs and colorize.
+                    # Warning: simple find might highlight wrong occurrences if word repeats.
+                    # But history data doesn't store indices.
+                    # We can try to reconstruct or just highlight all occurrences of the corrected phrase?
+                    # Better: The result text IS the composition of equal + new.
+                    # But we only have the final string here.
+
+                    # Fallback: Highlight all occurrences of 'new' diff words.
+                    content = self.data['result']
+                    for d in self.data['diffs']:
+                        new_word = d['new']
+                        if not new_word: continue
+
+                        start_idx = "1.0"
+                        while True:
+                            pos = self.res_box.search(new_word, start_idx, stopindex="end")
+                            if not pos: break
+                            end_pos = f"{pos}+{len(new_word)}c"
+                            self.res_box.tag_add("correct", pos, end_pos)
+                            start_idx = end_pos
+
                 self.res_box.configure(state="disabled")
 
                 if self.data['diffs']:
@@ -251,6 +281,7 @@ class QuickReviewDialog(ctk.CTkToplevel):
         self.bind("<space>", lambda e: self.action_skip())
         self.bind("<Escape>", lambda e: self.action_save_and_exit())
 
+        self.after(100, lambda: self.focus_force())
         self.show_current()
 
     def is_trivial(self, old, new):
