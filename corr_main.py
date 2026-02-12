@@ -34,6 +34,7 @@ class MainApp(ctk.CTk):
             "Dash": self.tabview.add("Dashboard"),
             "Hist": self.tabview.add("Historia"),
             "Snip": self.tabview.add("Snippety"),
+            "Short": self.tabview.add("Skróty"),
             "Sett": self.tabview.add("Ustawienia"),
         }
 
@@ -41,10 +42,12 @@ class MainApp(ctk.CTk):
         self.setup_dash()
         self.setup_hist()
         self.setup_snip()
+        self.setup_short()
         self.setup_sett()
 
         # Footer
-        self.status = ctk.CTkLabel(self, text="Gotowy", anchor="w", height=25)
+        ver = cfg.get_version()
+        self.status = ctk.CTkLabel(self, text=f"Gotowy | {ver}", anchor="w", height=30, font=("Arial", 12))
         self.status.grid(row=1, column=0, sticky="ew", padx=10)
 
         if not cfg.config.get("api_key"):
@@ -146,6 +149,7 @@ class MainApp(ctk.CTk):
         except: pass
 
     def trigger_win_v(self):
+        colors = cfg.get_theme_colors()
         keyboard.send('windows+v')
         self.status.configure(text="Otwarto historię schowka (Win+V)", text_color=colors.get("accent_text"))
 
@@ -188,18 +192,23 @@ class MainApp(ctk.CTk):
 
         ctk.CTkButton(c, text="Pomiń (Tryb Gościa)", fg_color="transparent", text_color="gray", hover=False, command=self.skip_login).pack(side="bottom", pady=20)
 
+        # Auto login check
+        self.perform_fake_login()
+
     def perform_fake_login(self):
-        # Simulate Network Request
-        self.login_frame.destroy()
+        # Simulate Network Request (Auto-login for Kamil as requested)
+        if self.login_frame:
+            self.login_frame.destroy()
+
         cfg.user_profile = {
-            "name": "Jan Kowalski",
-            "email": "jan.kowalski@gmail.com",
+            "name": "Kamil Kowalski",
+            "email": "kamil@kowalczyk.com",
             "photo": "",
             "logged_in": True
         }
         cfg.save_profile()
         self.show_user_badge()
-        self.status.configure(text="Zalogowano pomyślnie!", text_color="green")
+        self.status.configure(text="Zalogowano jako Kamil", text_color="green")
 
     def skip_login(self):
         self.login_frame.destroy()
@@ -324,6 +333,54 @@ class MainApp(ctk.CTk):
         if res:
             btn.configure(text=res)
 
+    # --- SHORTCUTS ---
+    def setup_short(self):
+        f = self.tabs["Short"]
+        colors = cfg.get_theme_colors()
+
+        # Header
+        ctk.CTkLabel(f, text="Twoje Skróty (Visual Reference)", font=("Arial", 16, "bold"), text_color=colors.get("text_color")).pack(pady=10)
+
+        # Scan folder
+        scroll = ctk.CTkScrollableFrame(f, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
+        # 1. Standard Windows Hotkeys (Hardcoded reference)
+        std_frame = ctk.CTkFrame(scroll, fg_color=colors.get("frame_color"))
+        std_frame.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(std_frame, text="System Windows", font=("Arial", 14, "bold"), text_color=colors.get("accent_text")).pack(pady=5)
+
+        keys = [
+            ("WIN + V", "Historia Schowka"),
+            ("WIN + SHIFT + S", "Zrzut Ekranu"),
+            ("WIN + .", "Panel Emoji"),
+            ("CTRL + SHIFT + ESC", "Menedżer Zadań"),
+            ("WIN + L", "Zablokuj Ekran")
+        ]
+        for k, d in keys:
+            r = ctk.CTkFrame(std_frame, fg_color="transparent")
+            r.pack(fill="x", padx=10, pady=2)
+            ctk.CTkLabel(r, text=k, font=("Consolas", 12, "bold"), width=150, anchor="e", text_color=colors.get("text_color")).pack(side="left")
+            ctk.CTkLabel(r, text=d, text_color="gray", anchor="w").pack(side="left", padx=10)
+
+        # 2. Scan Directory
+        target_dir = r"C:\Users\kamil\Pictures\Screenshots\Shortuts"
+        if not os.path.exists(target_dir):
+            try: os.makedirs(target_dir)
+            except: pass
+
+        if os.path.exists(target_dir):
+            files = [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            if files:
+                ctk.CTkLabel(scroll, text="Wykryte w katalogu:", font=("Arial", 14, "bold"), text_color=colors.get("accent_text")).pack(pady=(20,5))
+                for file in files:
+                    # Just listing filenames for now as full image viewer is heavy
+                    f_card = ctk.CTkFrame(scroll, fg_color=colors.get("frame_color"))
+                    f_card.pack(fill="x", padx=10, pady=2)
+                    ctk.CTkLabel(f_card, text=f"🖼️ {file}", text_color=colors.get("text_color")).pack(side="left", padx=10, pady=5)
+            else:
+                ctk.CTkLabel(scroll, text=f"Brak obrazków w:\n{target_dir}", text_color="gray").pack(pady=20)
+
     # --- SNIPPETS ---
     def setup_snip(self):
         f = self.tabs["Snip"]
@@ -383,6 +440,11 @@ class MainApp(ctk.CTk):
         ent_key.pack(fill="x", padx=20, pady=5)
         if edit_key: ent_key.insert(0, edit_key)
 
+        ctk.CTkLabel(d, text="Skrót klawiszowy (opcjonalny, np. ctrl+1):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        ent_hk = ctk.CTkEntry(d)
+        ent_hk.pack(fill="x", padx=20, pady=5)
+        # Load existing hotkey if editing (assuming data structure allows, simplified here)
+
         ctk.CTkLabel(d, text="Treść:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
         txt_content = ctk.CTkTextbox(d, height=100)
         txt_content.pack(fill="both", expand=True, padx=20, pady=5)
@@ -390,11 +452,12 @@ class MainApp(ctk.CTk):
 
         def save():
             k = ent_key.get().strip()
+            hk = ent_hk.get().strip().lower()
             c = txt_content.get("0.0", "end").strip()
             if k and c:
                 if edit_key and edit_key != k:
                     cfg.snippets.remove_snippet(edit_key) # Rename case
-                cfg.snippets.add_snippet(k, c)
+                cfg.snippets.add_snippet(k, c, hotkey=hk)
                 self.refresh_snip()
                 d.destroy()
 
@@ -493,8 +556,12 @@ class MainApp(ctk.CTk):
 
     def change_font_live(self, choice):
         cfg.config["font_family"] = choice
-        # Font changes usually require restart or traversing all widgets.
-        # For simplicity, we just save config, but user might need restart for full effect.
+        self.ask_restart("Zmiana czcionki wymaga restartu. Czy zrestartować teraz?")
+
+    def ask_restart(self, msg):
+        import tkinter.messagebox
+        if tkinter.messagebox.askyesno("Restart", msg):
+            self.restart_app()
 
     def update_theme(self):
         t = cfg.config.get("theme", "Dark")
@@ -565,7 +632,7 @@ class MainApp(ctk.CTk):
 
         # Words Card with Review Button
         colors = cfg.get_theme_colors()
-        fr = ctk.CTkFrame(f, fg_color=colors.get("frame_color", "#333"))
+        fr = ctk.CTkFrame(f, fg_color=colors.get("frame_color", "#333"), border_width=2, border_color=colors.get("button_color")) # Surprise: Colored border!
         fr.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
         ctk.CTkLabel(fr, text="Słowa", text_color=colors.get("text_color")).pack(pady=5)
         self.c3_val = ctk.CTkLabel(fr, text="0", font=("Arial", 26, "bold"), text_color=colors.get("accent_text"))

@@ -30,14 +30,26 @@ class AIEngine:
         clean_text = text
 
         if action == "TRANSLATE":
-            # Regex do wyłapania "PL:", "EN:", "DE:" na początku
-            match = re.match(r"^([A-Z]{2,3}):\s*(.*)", text, re.DOTALL)
-            if match:
-                lang_code = match.group(1).upper()
-                clean_text = match.group(2)
-
-                langs = {"PL": "Polish", "EN": "English", "DE": "German", "ES": "Spanish", "FR": "French", "IT": "Italian"}
-                target_lang_hint = langs.get(lang_code, lang_code)
+            # New tag logic: ;tag; e.g. ;en; ;tur;
+            # Regex: look for start like ;xyz;
+            tag_match = re.match(r"^;([a-zA-Z]+);\s*(.*)", text, re.DOTALL)
+            if tag_match:
+                tag = tag_match.group(1).lower()
+                clean_text = tag_match.group(2)
+                # Map simple tags
+                lang_map = {
+                    "en": "English", "pl": "Polish", "de": "German", "tur": "Turkish", "chi": "Chinese",
+                    "es": "Spanish", "fr": "French", "ru": "Russian", "ua": "Ukrainian"
+                }
+                target_lang_hint = lang_map.get(tag, tag)
+            else:
+                # Old Regex "PL:"
+                match = re.match(r"^([A-Z]{2,3}):\s*(.*)", text, re.DOTALL)
+                if match:
+                    lang_code = match.group(1).upper()
+                    clean_text = match.group(2)
+                    langs = {"PL": "Polish", "EN": "English", "DE": "German", "ES": "Spanish", "FR": "French", "IT": "Italian"}
+                    target_lang_hint = langs.get(lang_code, lang_code)
 
         # Pobieramy prompty z konfiguracji
         prompts = cfg.config.get("prompts", {})

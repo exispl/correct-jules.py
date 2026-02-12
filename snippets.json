@@ -1,0 +1,7 @@
+{
+    "testkey": {
+        "content": "content",
+        "type": "text",
+        "hotkey": "ctrl+1"
+    }
+}

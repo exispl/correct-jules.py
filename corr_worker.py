@@ -20,6 +20,31 @@ class ActionWorker:
         # Use on_release to catch chars after they are typed
         keyboard.on_release(self._on_key_release)
 
+        # Register snippet hotkeys
+        self._register_snippet_hotkeys()
+
+    def _register_snippet_hotkeys(self):
+        snippets = cfg.snippets.snippets
+        for key, data in snippets.items():
+            hk = data.get("hotkey")
+            if hk:
+                try:
+                    # Bind hotkey to paste content
+                    # We use a lambda to capture content
+                    keyboard.add_hotkey(hk, lambda c=data['content']: self._paste_snippet(c))
+                except: pass
+
+        # Register Global Check Hotkey
+        try:
+            keyboard.add_hotkey("ctrl+shift+f9", lambda: self.trigger("CORRECT"))
+        except: pass
+
+    def _paste_snippet(self, content):
+        # Simply write content
+        time.sleep(0.1)
+        keyboard.write(content)
+        gui_queue.put(("STATUS", {"text": "Wstawiono snippet (skrót)", "color": "#4aa3df"}))
+
     def _on_key_release(self, event):
         if not self.tracking_enabled: return
 
@@ -89,6 +114,20 @@ class ActionWorker:
         time.sleep(0.1)
         text = pyperclip.paste()
         if not text.strip(): return
+
+        # Save original to history right away (so Win+V works if something goes wrong, or we just want to keep it)
+        # Actually Windows clipboard history handles Ctrl+C automatically.
+        # But user wants to ensure original is recoverable.
+        # Since we just did Ctrl+C, it IS in the clipboard history stack.
+
+        # Check for inline translation tags if action is generic or translate
+        # If user pressed hotkey for correct but text has ;en;, maybe switch action?
+        # For now, ai.process_text handles the tag extraction, so we just pass "TRANSLATE" if we detect tag?
+        # User said "Wiedz, że masz przetłumaczyć".
+
+        if ";" in text[:10]: # Quick check
+             if any(tag in text[:10].lower() for tag in [";en;", ";pl;", ";de;", ";tur;", ";chi;"]):
+                 action_type = "TRANSLATE"
 
         res, dur = ai.process_text(action_type, text)
         if res:

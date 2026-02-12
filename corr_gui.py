@@ -44,7 +44,11 @@ class HistoryItem(ctk.CTkFrame):
 
         # Date & Time
         dt_str = f"{data['time']}" # Full date
-        ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 10)).pack(side="right")
+        ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 10)).pack(side="right", padx=5)
+
+        # Delete Button (Trash Icon)
+        ctk.CTkButton(self.header, text="🗑️", width=25, height=25, fg_color="transparent", hover_color=colors.get("bubble_hover"),
+                      text_color="red", command=self.delete_me).pack(side="right", padx=5)
 
         # Details (hidden by default)
         self.details = ctk.CTkFrame(self, fg_color="transparent")
@@ -64,6 +68,13 @@ class HistoryItem(ctk.CTkFrame):
             ctk.CTkLabel(self.details, text="Zmiany (Słowo po słowie):", text_color=colors.get("accent_text"), font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
             self.diff_frame = ctk.CTkFrame(self.details, fg_color=colors.get("input_bg"))
             self.diff_frame.pack(fill="x", padx=10, pady=5)
+
+    def delete_me(self):
+        # Remove from config history list
+        if self.data in cfg.history:
+            cfg.history.remove(self.data)
+            cfg.save_history()
+        self.destroy()
 
     def toggle(self, event=None):
         if self.expanded:

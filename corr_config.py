@@ -125,6 +125,9 @@ class ConfigManager:
         with open(HISTORY_FILE, "w", encoding="utf-8") as f:
             json.dump({"history": self.history, "stats": self.stats}, f, indent=4, ensure_ascii=False)
 
+    def get_version(self):
+        return "v0.1.12"
+
     def add_history_entry(self, type_str, original, result, duration, diffs=None):
         entry = {
             "id": int(time.time() * 1000),
@@ -207,6 +210,7 @@ class SnippetManager:
             json.dump(self.snippets, f, indent=4, ensure_ascii=False)
 
     def add_snippet(self, key, content, type="text", hotkey=None):
+        # Support hotkey binding
         self.snippets[key] = {"content": content, "type": type, "hotkey": hotkey}
         self.save()
 
