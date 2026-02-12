@@ -28,7 +28,7 @@ DEFAULT_CONFIG = {
     "hotkey_explain": "ctrl+F10",
     "font_family": "Segoe UI",
     "font_size": 18,
-    "theme": "Dark",
+    "theme": "Light",
     "icons_path": "D:\\exis\\Icons",
     "prompts": {
         "CORRECT": "Jesteś ekspertem językowym. Popraw błędy w tekście. Zwróć TYLKO poprawiony tekst.",
@@ -129,7 +129,7 @@ class ConfigManager:
             json.dump({"history": self.history, "stats": self.stats}, f, indent=4, ensure_ascii=False)
 
     def get_version(self):
-        return "v0.2.0"
+        return "v0.2.1"
 
     def add_history_entry(self, type_str, original, result, duration, diffs=None):
         entry = {

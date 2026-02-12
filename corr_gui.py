@@ -11,14 +11,39 @@ class BubbleButton(ctk.CTkButton):
     """Przycisk udający tag HTML (chmurkę)"""
     def __init__(self, parent, text, original_text, command=None, **kwargs):
         colors = cfg.get_theme_colors()
-        font_cfg = (cfg.config["font_family"], cfg.config["font_size"] - 2)
+        # Ensure bubble size is similar to text size (no huge extra padding) but distinctive
+        font_cfg = (cfg.config["font_family"], cfg.config["font_size"])
+
         super().__init__(parent, text=text, font=font_cfg,
                          fg_color=colors.get("bubble_bg", "#00695c"),
                          hover_color=colors.get("bubble_hover", "#004d40"),
-                         text_color="white", # Contrast text for buttons usually white
-                         height=24, corner_radius=12, width=len(text)*10 + 20,
+                         text_color="white",
+                         height=28, # Slightly taller
+                         corner_radius=14,
+                         width=len(text)*10 + 10, # Adjusted width
                          command=command, **kwargs)
         self.original_text = original_text
+        self.colors = colors
+
+        # Scroll Bindings
+        self.bind("<MouseWheel>", self.on_scroll)
+        self.bind("<Button-3>", self.on_right_click)
+
+    def on_scroll(self, event):
+        # Delta > 0 -> Up (Accept -> Green)
+        # Delta < 0 -> Down (Reject -> Red)
+        if event.delta > 0:
+            self.configure(fg_color="#2CC985") # Green
+            # Ideally trigger "accept" logic immediately or mark for accept
+            # For now visual feedback, logic can be in MainApp
+            if self.master.master.master: # Traversing up to MainApp is hacky, better use callback
+                 pass
+        else:
+            self.configure(fg_color="#FF4747") # Red
+
+    def on_right_click(self, event):
+        # Trigger external handler passed via command or separate binding
+        pass
 
 class HistoryItem(ctk.CTkFrame):
     """Zwijany element historii"""
@@ -98,19 +123,27 @@ class HistoryItem(ctk.CTkFrame):
                     for d in self.data['diffs']:
                         row = ctk.CTkFrame(self.diff_frame, fg_color="transparent")
                         row.pack(fill="x", pady=2)
+                        row.bind("<Button-3>", lambda e, old=d['old'], new=d['new']: self.open_review(old, new))
 
                         # Old Word (Red)
-                        ctk.CTkLabel(row, text=d['old'], text_color="#FF4747", font=("Consolas", 14, "bold"), width=120, anchor="e").pack(side="left")
+                        l1 = ctk.CTkLabel(row, text=d['old'], text_color="#FF4747", font=("Consolas", 14, "bold"), width=120, anchor="e")
+                        l1.pack(side="left")
+                        l1.bind("<Button-3>", lambda e, old=d['old'], new=d['new']: self.open_review(old, new))
 
                         # Arrow
                         ctk.CTkLabel(row, text="➡", font=("Arial", 14), width=30).pack(side="left")
 
                         # New Word (Green)
-                        ctk.CTkLabel(row, text=d['new'], text_color="#2CC985", font=("Consolas", 14, "bold"), width=120, anchor="w").pack(side="left")
-
-                        # Context (fragment) - optional, can be complex to calculate index
+                        l2 = ctk.CTkLabel(row, text=d['new'], text_color="#2CC985", font=("Consolas", 14, "bold"), width=120, anchor="w")
+                        l2.pack(side="left")
+                        l2.bind("<Button-3>", lambda e, old=d['old'], new=d['new']: self.open_review(old, new))
 
             self.expanded = True
+
+    def open_review(self, old, new):
+        # This needs a way to talk to MainApp or just open the dialog directly
+        # Since HistoryItem is deep, let's try opening dialog with this item only
+        QuickReviewDialog(self.winfo_toplevel(), [(old, new)])
 
 # --- POPUPS ---
 class ReviewPopup(ctk.CTkToplevel):

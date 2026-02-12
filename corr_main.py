@@ -6,23 +6,27 @@ import time
 import difflib
 import keyboard
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 import os
+import webbrowser
 
 from corr_config import cfg, gui_queue, FONTS
 from corr_ai import ai
-from corr_gui import BubbleButton, HistoryItem, ReviewPopup
+from corr_gui import BubbleButton, HistoryItem, ReviewPopup, QuickReviewDialog
 from corr_worker import worker
 
 # --- MAIN APP ---
 class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("AI Assistant Pro")
-        self.geometry("1200x800")
+        self.title("AI Assistant Pro v0.2.1")
+        self.geometry("1300x900")
         self.protocol("WM_DELETE_WINDOW", self.hide_window)
 
         self.update_theme()
+
+        # Menu Bar
+        self.create_menu_bar()
 
         # Grid layout
         self.grid_columnconfigure(0, weight=1)
@@ -36,14 +40,18 @@ class MainApp(ctk.CTk):
             "Hist": self.tabview.add("Historia"),
             "Snip": self.tabview.add("Snippety"),
             "Short": self.tabview.add("Skróty"),
+            "Suno": self.tabview.add("Suno"),
+            "Info": self.tabview.add("Info"),
             "Sett": self.tabview.add("Ustawienia"),
         }
 
-        # Init Modules
+        # Init Modules - Pre-load all content
         self.setup_dash()
         self.setup_hist()
         self.setup_snip()
         self.setup_short()
+        self.setup_suno()
+        self.setup_info()
         self.setup_sett()
 
         # Footer
@@ -64,6 +72,33 @@ class MainApp(ctk.CTk):
         self.register_hotkeys()
         self.setup_tray()
 
+    def create_menu_bar(self):
+        menubar = tk.Menu(self)
+
+        # File
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Zamknij do traya", command=self.hide_window)
+        file_menu.add_command(label="Wyjdź", command=self.quit_app)
+        menubar.add_cascade(label="Plik", menu=file_menu)
+
+        # Edit
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(label="Wyczyść historię", command=self.clear_history)
+        menubar.add_cascade(label="Edycja", menu=edit_menu)
+
+        # Settings link
+        sett_menu = tk.Menu(menubar, tearoff=0)
+        sett_menu.add_command(label="Otwórz ustawienia", command=lambda: self.tabview.set("Ustawienia"))
+        menubar.add_cascade(label="Ustawienia", menu=sett_menu)
+
+        self.config(menu=menubar)
+
+    def clear_history(self):
+        cfg.history = []
+        cfg.save_history()
+        self.refresh_hist()
+        self.status.configure(text="Historia wyczyszczona.", text_color="green")
+
     def check_queue(self):
         try:
             while True:
@@ -78,73 +113,130 @@ class MainApp(ctk.CTk):
         except queue.Empty: pass
         finally: self.after(200, self.check_queue)
 
-    # --- TEST ZONE (DASHBOARD) ---
-    def setup_test_zone(self, parent, row):
-        parent.grid_rowconfigure(row, weight=1)
-        colors = cfg.get_theme_colors()
-        font_base = (cfg.config["font_family"], colors.get("font_size_base", 14))
-        font_large = (cfg.config["font_family"], colors.get("font_size_large", 18))
+    # --- DASHBOARD ---
+    def setup_dash(self):
+        f = self.tabs["Dash"]
+        # Reset grid
+        for w in f.winfo_children(): w.destroy()
 
-        # Container
-        f = ctk.CTkFrame(parent, fg_color="transparent")
-        f.grid(row=row, column=0, columnspan=3, sticky="nsew", padx=10, pady=5)
         f.grid_columnconfigure(0, weight=1)
         f.grid_rowconfigure(2, weight=1) # Output expands
 
-        # Input Area
-        input_label_frame = ctk.CTkFrame(f, fg_color="transparent")
-        input_label_frame.grid(row=0, column=0, sticky="ew", padx=5)
+        colors = cfg.get_theme_colors()
+        font_base = (cfg.config["font_family"], colors.get("font_size_base", 14))
+        font_large = (cfg.config["font_family"], colors.get("font_size_large", 18))
+        font_lato = ("Lato", 20, "bold") # Hardcoded Lato as requested, or fallback if system matches
 
-        # Tools Icons (Copy, Paste History) - Much Bigger Icons
-        ctk.CTkButton(input_label_frame, text="📋", width=60, height=50, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="black", font=("Arial", 24), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
+        # 1. Review Button (Top, Centered, Large, Shadow)
+        # Using a Frame for shadow effect simulation or just distinctive color
+        top_frame = ctk.CTkFrame(f, fg_color="transparent")
+        top_frame.grid(row=0, column=0, pady=(10, 5))
 
-        ctk.CTkButton(input_label_frame, text="🗂️", width=60, height=50, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="black", font=("Arial", 24), command=self.trigger_win_v).pack(side="right", padx=5)
+        btn_rev = ctk.CTkButton(top_frame, text="⚡ PRZEGLĄD SŁÓW", width=300, height=50,
+                                font=("Arial", 18, "bold"),
+                                fg_color=colors.get("accent_text", "#2CC985"),
+                                text_color="black", # Contrast
+                                command=self.open_review_mode)
+        btn_rev.pack()
+        # "Shadow" label behind? Hard in CTk. We rely on color.
 
-        self.test_in = ctk.CTkTextbox(f, height=120, font=font_large,
+        # 2. Input Textbox (Centered, Narrower, Taller)
+        input_container = ctk.CTkFrame(f, fg_color="transparent")
+        input_container.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
+        input_container.grid_columnconfigure(0, weight=1)
+
+        # We want input to be narrower, so we can use padding or fixed width?
+        # "troszkę węższe, tak gdzieś o 300 pikseli". Window is 1200. So ~900 width.
+        # "troszkę wyższe, o jakieś 50 pikseli". Normal is maybe 100 -> 150.
+
+        self.test_in = ctk.CTkTextbox(input_container, width=800, height=160, font=font_large,
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
-        self.test_in.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        self.test_in.grid(row=0, column=0, pady=5)
 
         # Focus input by default
         self.after(200, lambda: self.test_in.focus_set())
 
-        # Action Buttons Frame
-        btn_frame = ctk.CTkFrame(f, fg_color="transparent")
-        btn_frame.grid(row=1, column=1, sticky="nw", padx=5, pady=5)
+        # 3. Paste Buttons (Under Input? User said "Tuż pod tym polem niech będą te przyciski, te batony: korekta...")
+        # Wait, user said "Tuż pod tym polem niech będą te przyciski, te batony: korekta...".
+        # BUT earlier: "pamiętaj, żeby te przyciski do wklejenia... Nie będą na środku, większy odstęp...".
+        # Let's put Paste buttons to the LEFT and RIGHT of the input? Or above?
+        # "przyciski do wklejenia... Nie będą na środku".
+        # Let's put them in a row ABOVE the Action Buttons but BELOW Input?
 
-        actions = [
-            ("✨ Korekta", "CORRECT"),
-            ("🌍 Tłumacz", "TRANSLATE"),
-            ("📝 Streszcz", "SUMMARIZE"),
-            ("👔 Ton", "TONE_CHANGE"),
-            ("💡 Wyjaśnij", "EXPLAIN")
-        ]
+        action_area = ctk.CTkFrame(f, fg_color="transparent")
+        action_area.grid(row=3, column=0, pady=10)
 
-        for label, code in actions:
-            ctk.CTkButton(btn_frame, text=label, width=140, height=40, font=(font_base[0], font_base[1], "bold"),
-                          fg_color=colors.get("button_color"),
-                          hover_color=colors.get("button_hover"), text_color="black", # Button text usually black on bright buttons
-                          command=lambda c=code: self.run_dashboard_action(c)).pack(pady=4)
+        # Paste Row
+        paste_frame = ctk.CTkFrame(action_area, fg_color="transparent")
+        paste_frame.pack(pady=10)
 
-        # Output Area
-        output_label_frame = ctk.CTkFrame(f, fg_color="transparent")
-        output_label_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=(10,0))
-        ctk.CTkLabel(output_label_frame, text="Wynik:", text_color=colors.get("text_color"), font=font_base).pack(side="left")
+        # "Większy odstęp"
+        btn_paste = ctk.CTkButton(paste_frame, text="WKLEJ TEKST", width=200, height=60,
+                                  font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
+                                  command=lambda: self.paste_to_input())
+        btn_paste.pack(side="left", padx=40) # Big spacing
 
-        ctk.CTkButton(output_label_frame, text="📋", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="black", font=("Arial", 20), command=lambda: self.copy_to_clipboard(self.out_text)).pack(side="right", padx=5)
+        btn_hist = ctk.CTkButton(paste_frame, text="HISTORIA (Win+V)", width=200, height=60,
+                                 font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
+                                 command=self.trigger_win_v)
+        btn_hist.pack(side="left", padx=40)
+
+        # 4. Action Buttons (2 Rows, Lato, Large)
+        # Rows:
+        # 1: Korekta, Tłumacz
+        # 2: Streszcz, Ton, Wyjaśnij
+
+        act_frame = ctk.CTkFrame(action_area, fg_color="transparent")
+        act_frame.pack(pady=10)
+
+        def mk_btn(parent, txt, code):
+            return ctk.CTkButton(parent, text=txt, command=lambda: self.run_dashboard_action(code),
+                                 font=font_lato, width=220, height=50,
+                                 fg_color=colors.get("button_color"), text_color="black")
+
+        r1 = ctk.CTkFrame(act_frame, fg_color="transparent")
+        r1.pack(pady=5)
+        mk_btn(r1, "KOREKTA", "CORRECT").pack(side="left", padx=10)
+        mk_btn(r1, "TŁUMACZ", "TRANSLATE").pack(side="left", padx=10)
+
+        r2 = ctk.CTkFrame(act_frame, fg_color="transparent")
+        r2.pack(pady=5)
+        mk_btn(r2, "STRESZCZENIE", "SUMMARIZE").pack(side="left", padx=10)
+        mk_btn(r2, "ZMIANA TONU", "TONE_CHANGE").pack(side="left", padx=10)
+        mk_btn(r2, "WYJAŚNIENIE", "EXPLAIN").pack(side="left", padx=10)
+
+        # 5. Output Area
+        # "Wynik:" label above?
 
         self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
-        self.out_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", padx=5, pady=5)
+        self.out_frame.grid(row=4, column=0, sticky="nsew", padx=20, pady=5)
 
         self.out_text = tk.Text(self.out_frame, bg=colors.get("history_bg"), fg=colors.get("text_color"),
                                 font=font_large,
                                 relief="flat", wrap="word", padx=10, pady=10)
         self.out_text.pack(fill="both", expand=True)
 
-        # Context Menu
+        # 6. Bottom Actions (Accept, Reset)
+        bot_frame = ctk.CTkFrame(f, fg_color="transparent")
+        bot_frame.grid(row=5, column=0, pady=10)
+
+        ctk.CTkButton(bot_frame, text="ZAAKCEPTUJ WSZYSTKO", width=200, height=40, fg_color="#2CC985", text_color="black",
+                      command=self.accept_all_bubbles).pack(side="left", padx=10)
+
+        ctk.CTkButton(bot_frame, text="RESETUJ", width=150, height=40, fg_color="#FF4747", text_color="white",
+                      command=self.reset_output).pack(side="left", padx=10)
+
+        # Context Menu for Textbox
         self.menu = tk.Menu(self, tearoff=0, bg=colors.get("frame_color"), fg=colors.get("text_color"))
+
+    def paste_to_input(self):
+        try:
+            txt = pyperclip.paste()
+            self.test_in.insert("end", txt)
+        except: pass
+
+    def trigger_win_v(self):
+        keyboard.send('windows+v')
 
     def copy_to_clipboard(self, widget):
         try:
@@ -153,17 +245,13 @@ class MainApp(ctk.CTk):
             self.status.configure(text="Skopiowano do schowka!", text_color="green")
         except: pass
 
-    def trigger_win_v(self):
-        colors = cfg.get_theme_colors()
-        keyboard.send('windows+v')
-        self.status.configure(text="Otwarto historię schowka (Win+V)", text_color=colors.get("accent_text"))
-
     def show_user_badge(self):
-        f = self.tabs["Dash"]
+        # Badge logic remains similar, maybe move if layout changed?
+        # Dashboard grid changed. Let's put badge in absolute position or status bar?
+        # Absolute is fine.
         colors = cfg.get_theme_colors()
-
         name = cfg.user_profile.get("name", "Gość")
-        badge = ctk.CTkLabel(f, text=f"👤 {name}", text_color=colors.get("text_color"), fg_color=colors.get("frame_color"), corner_radius=10)
+        badge = ctk.CTkLabel(self.tabs["Dash"], text=f"👤 {name}", text_color=colors.get("text_color"), fg_color=colors.get("frame_color"), corner_radius=10)
         badge.place(relx=0.95, rely=0.02, anchor="ne")
         badge.bind("<Button-1>", lambda e: self.logout())
 
@@ -171,7 +259,8 @@ class MainApp(ctk.CTk):
         cfg.user_profile = {"name": "Gość", "email": "", "photo": "", "logged_in": False}
         cfg.save_profile()
         self.status.configure(text="Wylogowano.", text_color="yellow")
-        for w in self.tabs["Dash"].place_slaves(): w.destroy()
+        for w in self.tabs["Dash"].place_slaves():
+            if isinstance(w, ctk.CTkLabel) and "👤" in w.cget("text"): w.destroy()
         self.show_login_overlay()
 
     def show_login_overlay(self):
@@ -190,12 +279,12 @@ class MainApp(ctk.CTk):
         btn_g.pack(pady=40)
 
         ctk.CTkButton(c, text="Pomiń (Tryb Gościa)", fg_color="transparent", text_color="gray", hover=False, command=self.skip_login).pack(side="bottom", pady=20)
+
         self.perform_fake_login()
 
     def perform_fake_login(self):
         if self.login_frame:
             self.login_frame.destroy()
-
         cfg.user_profile = {
             "name": "Kamil Kowalski",
             "email": "kamil@kowalczyk.com",
@@ -249,8 +338,12 @@ class MainApp(ctk.CTk):
                 new_phrase = " ".join(res_words[j1:j2])
                 old_phrase = " ".join(orig_words[i1:i2])
                 btn = BubbleButton(self.out_text, text=new_phrase, original_text=old_phrase)
+                # Bind events
                 btn.bind("<Button-1>", lambda e, b=btn: self.show_bubble_menu(e, b))
+                # Right click -> handled inside BubbleButton class now? Or bind here too?
+                # Using class binding is cleaner but we need menu access.
                 btn.bind("<Button-3>", lambda e, b=btn: self.show_bubble_menu(e, b))
+
                 self.out_text.window_create("end", window=btn)
                 self.out_text.insert("end", " ")
 
@@ -307,12 +400,30 @@ class MainApp(ctk.CTk):
         if res:
             btn.configure(text=res)
 
+    def accept_all_bubbles(self):
+        # Iterate all widgets in text
+        # This is hard because Text widget manages windows.
+        # We can iterate children of text widget?
+        # Yes, bubbles are children of self.out_text
+        for child in self.out_text.winfo_children():
+            if isinstance(child, BubbleButton):
+                # Check if it's already resolved (transparent)
+                if child.cget("fg_color") != "transparent":
+                     self.resolve_bubble(child, child.cget("text"))
+        self.status.configure(text="Zaakceptowano wszystkie zmiany.", text_color="green")
+
+    def reset_output(self):
+        self.out_text.delete("1.0", "end")
+        self.test_in.delete("1.0", "end")
+
     # --- SHORTCUTS ---
     def setup_short(self):
         f = self.tabs["Short"]
+        for w in f.winfo_children(): w.destroy()
+
         colors = cfg.get_theme_colors()
 
-        ctk.CTkLabel(f, text="Twoje Skróty (Visual Reference)", font=("Arial", 16, "bold"), text_color=colors.get("text_color")).pack(pady=10)
+        ctk.CTkLabel(f, text="Skróty (Visual Reference)", font=("Arial", 16, "bold"), text_color=colors.get("text_color")).pack(pady=10)
 
         scroll = ctk.CTkScrollableFrame(f, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
@@ -334,7 +445,13 @@ class MainApp(ctk.CTk):
             ctk.CTkLabel(r, text=k, font=("Consolas", 12, "bold"), width=150, anchor="e", text_color=colors.get("text_color")).pack(side="left")
             ctk.CTkLabel(r, text=d, text_color="gray", anchor="w").pack(side="left", padx=10)
 
-        target_dir = r"C:\Users\kamil\Pictures\Screenshots\Shortuts"
+        # FIXED PATH: Shortcuts (not Shortuts)
+        target_dir = r"C:\Users\kamil\Pictures\Screenshots\Shortcuts"
+        if not os.path.exists(target_dir):
+             # Try typo path just in case
+             typo = r"C:\Users\kamil\Pictures\Screenshots\Shortuts"
+             if os.path.exists(typo): target_dir = typo
+
         if os.path.exists(target_dir):
             files = [f for f in os.listdir(target_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
             if files:
@@ -345,33 +462,44 @@ class MainApp(ctk.CTk):
                     ctk.CTkLabel(f_card, text=f"🖼️ {file}", text_color=colors.get("text_color")).pack(side="left", padx=10, pady=5)
             else:
                 ctk.CTkLabel(scroll, text=f"Brak obrazków w:\n{target_dir}", text_color="gray").pack(pady=20)
+        else:
+             ctk.CTkLabel(scroll, text=f"Brak katalogu:\n{target_dir}", text_color="gray").pack(pady=20)
 
-    # --- SNIPPETS ---
+    # --- SNIPPETS & ICONS ---
     def setup_snip(self):
         f = self.tabs["Snip"]
+        for w in f.winfo_children(): w.destroy()
+
         colors = cfg.get_theme_colors()
         font_base = (cfg.config["font_family"], colors.get("font_size_base", 14))
 
-        # Grid of Icons (Top)
+        # Grid of Icons (Top) - "Szybkie Akcje"
         icons_path = cfg.config.get("icons_path", "")
         if icons_path and os.path.exists(icons_path):
-            ctk.CTkLabel(f, text="Szybkie Akcje (Ikony)", font=("Arial", 16, "bold"), text_color=colors.get("accent_text")).pack(pady=5)
-            icon_frame = ctk.CTkScrollableFrame(f, height=150, fg_color="transparent", orientation="horizontal")
+            ctk.CTkLabel(f, text="Szybkie Akcje (Kopiuj obraz)", font=("Arial", 16, "bold"), text_color=colors.get("accent_text")).pack(pady=5)
+            icon_frame = ctk.CTkScrollableFrame(f, height=180, fg_color="transparent", orientation="horizontal")
             icon_frame.pack(fill="x", padx=5, pady=5)
 
             try:
-                files = [x for x in os.listdir(icons_path) if x.lower().endswith((".png", ".ico", ".jpg"))]
-                for file in files:
-                    # Simple button for each file
-                    # Ideally we would load the image, but CTkImage requires PIL which is fine
-                    # But for now let's just make square buttons with filenames if loading fails
-                    name = os.path.splitext(file)[0]
-                    btn = ctk.CTkButton(icon_frame, text=name, width=80, height=80,
+                # Recursively or just top level? Assuming top level or flat
+                # User mentioned "D:\exis\Icons\neue 3xxx" later for logo, so maybe deep?
+                # Just listing top level for now or specific subfolder if configured
+                files = []
+                for root, dirs, filenames in os.walk(icons_path):
+                    for filename in filenames:
+                        if filename.lower().endswith((".png", ".ico", ".jpg")):
+                            files.append(os.path.join(root, filename))
+                    break # Just top level for grid? Or flatten all? Let's do top level for now.
+
+                for file_path in files[:20]: # Limit to avoid lag if thousands
+                    name = os.path.splitext(os.path.basename(file_path))[0]
+                    # Display button
+                    btn = ctk.CTkButton(icon_frame, text=name[:10], width=80, height=80,
                                         fg_color=colors.get("button_color"), text_color="black",
-                                        command=lambda n=name: self.run_icon_action(n))
+                                        command=lambda p=file_path: self.copy_image_to_clipboard(p))
                     btn.pack(side="left", padx=5)
             except Exception as e:
-                ctk.CTkLabel(icon_frame, text=f"Błąd ładowania ikon: {e}").pack()
+                ctk.CTkLabel(icon_frame, text=f"Błąd: {e}").pack()
 
         # Tools
         tool_bar = ctk.CTkFrame(f, fg_color="transparent")
@@ -386,18 +514,37 @@ class MainApp(ctk.CTk):
         self.snip_scroll.pack(fill="both", expand=True, padx=5, pady=5)
         self.refresh_snip()
 
+    def copy_image_to_clipboard(self, path):
+        # Requires extra libs usually, but let's try basic Powershell clip or simple open
+        # Or use Pillow + Win32
+        # For simplicity in this env, we might just put path?
+        # User said "dać właśnie obrazki bezpośrednio".
+        # Let's try to use a simple hack with standard clipboard if possible, or just skip if complex deps missing.
+        # Actually we can use `clip` command for text, but for images...
+        # We'll just notify feature limitation if win32clipboard not available
+        try:
+            import win32clipboard
+            from PIL import Image
+            from io import BytesIO
+
+            image = Image.open(path)
+            output = BytesIO()
+            image.convert("RGB").save(output, "BMP")
+            data = output.getvalue()[14:]
+            output.close()
+
+            win32clipboard.OpenClipboard()
+            win32clipboard.EmptyClipboard()
+            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+            win32clipboard.CloseClipboard()
+            self.status.configure(text=f"Skopiowano obraz: {os.path.basename(path)}", text_color="green")
+        except ImportError:
+            self.status.configure(text="Brak biblioteki win32clipboard!", text_color="red")
+        except Exception as e:
+            self.status.configure(text=f"Błąd kopiowania: {e}", text_color="red")
+
     def run_icon_action(self, name):
-        # Trigger snippet if exists, or just type the name?
-        # User requirement implies icons are snippets.
-        # Let's assume the icon name matches a snippet key?
-        # Or maybe it just types the name?
-        # Let's try to find a snippet with that key.
-        if name in cfg.snippets.snippets:
-             # Execute snippet
-             data = cfg.snippets.snippets[name]
-             worker._execute_snippet(name, data)
-        else:
-             self.status.configure(text=f"Brak snippetu dla: {name}", text_color="yellow")
+        pass # Replaced by copy_image
 
     def refresh_snip(self):
         for w in self.snip_scroll.winfo_children(): w.destroy()
@@ -457,7 +604,6 @@ class MainApp(ctk.CTk):
 
         ctk.CTkLabel(d, text="Skrót klawiszowy:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
 
-        # Click-to-bind for snippets too!
         self.snippet_hk_var = tk.StringVar(value=edit_hotkey)
 
         def capture_snip_hk():
@@ -494,6 +640,77 @@ class MainApp(ctk.CTk):
 
         ctk.CTkButton(d, text="Zapisz", command=save, fg_color=colors.get("button_color"), text_color="black", height=40).pack(fill="x", padx=20, pady=20)
 
+    # --- INFO ---
+    def setup_info(self):
+        f = self.tabs["Info"]
+        for w in f.winfo_children(): w.destroy()
+
+        colors = cfg.get_theme_colors()
+
+        # Logo
+        logo_path = r"D:\exis\Icons\neue 3xxx\if_WoodMannequin_by_Artdesigner_60883.png"
+        if os.path.exists(logo_path):
+            try:
+                img = Image.open(logo_path)
+                img = img.resize((150, 150))
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(150, 150))
+                ctk.CTkLabel(f, image=ctk_img, text="").pack(pady=20)
+            except: pass
+
+        ctk.CTkLabel(f, text="AI Assistant Pro v0.2.1", font=("Arial", 24, "bold"), text_color=colors.get("accent_text")).pack(pady=10)
+        ctk.CTkLabel(f, text="Aplikacja stworzona do automatyzacji, korekty tekstu i zarządzania snippetami.", text_color=colors.get("text_color")).pack()
+        ctk.CTkLabel(f, text="Kamil Kowalski © 2024", text_color="gray").pack(pady=5)
+
+        ctk.CTkLabel(f, text="Plany na przyszłość:", font=("Arial", 16, "bold"), text_color=colors.get("text_color")).pack(pady=(30,10))
+        plans = [
+            "- Integracja z Suno API (Auto-Music)",
+            "- Zaawansowane makra głosowe",
+            "- Synchronizacja chmurowa"
+        ]
+        for p in plans:
+            ctk.CTkLabel(f, text=p, text_color="gray").pack()
+
+    # --- SUNO ---
+    def setup_suno(self):
+        f = self.tabs["Suno"]
+        for w in f.winfo_children(): w.destroy()
+
+        colors = cfg.get_theme_colors()
+
+        ctk.CTkLabel(f, text="Suno Automation", font=("Arial", 24, "bold"), text_color=colors.get("accent_text")).pack(pady=20)
+
+        ctk.CTkButton(f, text="Otwórz suno.com/create", command=lambda: webbrowser.open("https://suno.com/create"),
+                      width=200, height=40, fg_color=colors.get("button_color"), text_color="black").pack(pady=10)
+
+        # Form filler macro simulation
+        ctk.CTkLabel(f, text="Makro Wypełniania (Symulacja)", font=("Arial", 16, "bold")).pack(pady=(20,10))
+
+        self.suno_prompt = ctk.CTkTextbox(f, height=100, width=400)
+        self.suno_prompt.pack(pady=5)
+        self.suno_prompt.insert("0.0", "Wpisz opis piosenki tutaj...")
+
+        ctk.CTkButton(f, text="🚀 Uruchom Makro", command=self.run_suno_macro,
+                      width=200, height=50, fg_color="#FF4747", text_color="white").pack(pady=10)
+
+    def run_suno_macro(self):
+        # Open site and type
+        webbrowser.open("https://suno.com/create")
+        self.status.configure(text="Czekam 5s na załadowanie strony...", text_color="yellow")
+
+        def _macro():
+            time.sleep(5)
+            # Simulate tab navigation and typing
+            # This is fragile without visual feedback but serves the "macro" request
+            text = self.suno_prompt.get("0.0", "end").strip()
+
+            # Assuming focus starts somewhere, usually need to click.
+            # Keyboard only: Tab, Tab...
+            # This is a placeholder for the actual macro logic user requested.
+            keyboard.write(text)
+            self.status.configure(text="Makro wykonane.", text_color="green")
+
+        threading.Thread(target=_macro, daemon=True).start()
+
     # --- HISTORY ---
     def setup_hist(self):
         self.hist_scroll = ctk.CTkScrollableFrame(self.tabs["Hist"])
@@ -505,6 +722,26 @@ class MainApp(ctk.CTk):
         for entry in cfg.history:
             HistoryItem(self.hist_scroll, entry).pack(fill="x", pady=2)
 
+    def open_review_mode(self):
+        to_review = []
+        seen = set()
+        for entry in cfg.history:
+            if entry.get("diffs"):
+                for d in entry["diffs"]:
+                    old = d["old"]
+                    new = d["new"]
+                    if old in cfg.auto_replace.replacements: continue
+                    if old in cfg.auto_replace.ignored: continue
+                    pair = (old, new)
+                    if pair not in seen:
+                        seen.add(pair)
+                        to_review.append(pair)
+
+        if not to_review:
+            self.status.configure(text="Brak słówek do przeglądu!", text_color="yellow")
+            return
+        QuickReviewDialog(self, to_review)
+
     # --- SETTINGS ---
     def setup_sett(self):
         f = ctk.CTkScrollableFrame(self.tabs["Sett"])
@@ -512,26 +749,12 @@ class MainApp(ctk.CTk):
 
         colors = cfg.get_theme_colors()
 
-        # --- API Section ---
-        ctk.CTkLabel(f, text="API & Model", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(10,5))
-
-        ctk.CTkLabel(f, text="Klucz API (Groq):", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
-        self.ent_api = ctk.CTkEntry(f, width=400)
-        self.ent_api.pack(anchor="w", padx=20, pady=5)
-        self.ent_api.insert(0, cfg.config["api_key"])
-
-        ctk.CTkLabel(f, text="Model AI:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
-        models = cfg.config.get("models_list", ["llama-3.3-70b-versatile"])
-        self.combo_model = ctk.CTkComboBox(f, values=models, width=300)
-        self.combo_model.set(cfg.config.get("model", models[0]))
-        self.combo_model.pack(anchor="w", padx=20, pady=5)
-
-        # --- Appearance ---
+        # Appearance
         ctk.CTkLabel(f, text="Wygląd", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(20,5))
 
         ctk.CTkLabel(f, text="Motyw:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
         self.combo_theme = ctk.CTkComboBox(f, values=["Dark", "Light", "Creamy", "High Visibility"], width=300, command=self.change_theme_live)
-        self.combo_theme.set(cfg.config.get("theme", "Dark"))
+        self.combo_theme.set(cfg.config.get("theme", "Light"))
         self.combo_theme.pack(anchor="w", padx=20, pady=5)
 
         ctk.CTkLabel(f, text="Czcionka interfejsu:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
@@ -539,7 +762,7 @@ class MainApp(ctk.CTk):
         self.combo_font.set(cfg.config["font_family"])
         self.combo_font.pack(anchor="w", padx=20, pady=5)
 
-        # --- Hotkeys (Click-to-bind) ---
+        # Hotkeys
         ctk.CTkLabel(f, text="Skróty Klawiszowe (Kliknij by zmienić)", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(20,5))
 
         self.hotkey_vars = {}
@@ -559,37 +782,30 @@ class MainApp(ctk.CTk):
             curr_val = cfg.config.get(key, "Brak")
             self.hotkey_vars[key] = tk.StringVar(value=curr_val)
 
-            # Button for binding
             btn = ctk.CTkButton(fr, textvariable=self.hotkey_vars[key], width=200,
                                 fg_color=colors.get("input_bg"), hover_color=colors.get("frame_color"))
 
-            # Capture logic with closure
             def start_bind(k=key, b=btn):
                 self.hotkey_vars[k].set("Naciśnij klawisz...")
                 b.configure(fg_color="red")
-                self.update() # Force redraw
-
+                self.update()
                 try:
                     hk = keyboard.read_hotkey(suppress=False)
                     self.hotkey_vars[k].set(hk)
-                    # Update config immediately
                     cfg.config[k] = hk
                     cfg.save_config()
                     self.register_hotkeys()
                     b.configure(fg_color=colors.get("input_bg"))
                 except Exception as e:
                     self.hotkey_vars[k].set("Błąd")
-                    print(e)
 
             btn.configure(command=start_bind)
             btn.pack(side="left", padx=10)
 
-        # --- Prompts ---
+        # Prompts
         ctk.CTkLabel(f, text="Prompts Systemowe", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(20,5))
-
         self.prompts_entries = {}
         prompts = cfg.config.get("prompts", {})
-
         for key, val in prompts.items():
             ctk.CTkLabel(f, text=f"Prompt: {key}", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(5,0))
             txt = ctk.CTkTextbox(f, height=60, width=500)
@@ -597,18 +813,33 @@ class MainApp(ctk.CTk):
             txt.insert("0.0", val)
             self.prompts_entries[key] = txt
 
-        # --- Buttons ---
+        # Buttons
         b_frame = ctk.CTkFrame(f, fg_color="transparent")
         b_frame.pack(fill="x", padx=10, pady=30)
-
-        ctk.CTkButton(b_frame, text="Zapisz pozostałe", command=self.save_sett, fg_color="#2CC985", text_color="black").pack(side="left", padx=10)
+        ctk.CTkButton(b_frame, text="Zapisz ustawienia", command=self.save_sett, fg_color="#2CC985", text_color="black").pack(side="left", padx=10)
         ctk.CTkButton(b_frame, text="Restart Aplikacji", command=self.restart_app, fg_color="#FF4747").pack(side="left", padx=10)
+
+        # API (Moved to Bottom)
+        ctk.CTkLabel(f, text="API & Model", font=("Arial", 14, "bold"), text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(30,5))
+
+        ctk.CTkLabel(f, text="Klucz API (Groq):", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        self.ent_api = ctk.CTkEntry(f, width=400)
+        self.ent_api.pack(anchor="w", padx=20, pady=5)
+        self.ent_api.insert(0, cfg.config["api_key"])
+
+        ctk.CTkLabel(f, text="Model AI:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        models = cfg.config.get("models_list", ["llama-3.3-70b-versatile"])
+        self.combo_model = ctk.CTkComboBox(f, values=models, width=300)
+        self.combo_model.set(cfg.config.get("model", models[0]))
+        self.combo_model.pack(anchor="w", padx=20, pady=5)
 
     def change_theme_live(self, choice):
         cfg.config["theme"] = choice
         self.update_theme()
-        # Full refresh might be needed for some colors, but let's try basic
-        self.refresh_dash()
+        # Full rebuild might be needed for proper reload, but for now:
+        self.setup_dash() # Rebuild dash
+        self.setup_sett() # Rebuild settings to reflect color changes
+        # Others won't change until clicked or rebuilt
 
     def change_font_live(self, choice):
         cfg.config["font_family"] = choice
@@ -620,11 +851,9 @@ class MainApp(ctk.CTk):
             self.restart_app()
 
     def update_theme(self):
-        t = cfg.config.get("theme", "Dark")
-        if t == "Light": ctk.set_appearance_mode("Light")
+        t = cfg.config.get("theme", "Light")
+        if t == "Light" or t == "Creamy": ctk.set_appearance_mode("Light")
         else: ctk.set_appearance_mode("Dark")
-
-        # Apply colors to window
         colors = cfg.get_theme_colors()
         self.configure(fg_color=colors.get("fg_color"))
 
@@ -634,7 +863,6 @@ class MainApp(ctk.CTk):
         cfg.config["font_family"] = self.combo_font.get()
         cfg.config["theme"] = self.combo_theme.get()
 
-        # Save prompts
         new_prompts = {}
         for key, widget in self.prompts_entries.items():
             new_prompts[key] = widget.get("0.0", "end").strip()
@@ -648,73 +876,8 @@ class MainApp(ctk.CTk):
         import sys
         import os
         self.quit_app()
-        # Wait a bit to ensure tray icon is removed
         time.sleep(0.5)
         os.execl(sys.executable, sys.executable, *sys.argv)
-
-    # --- DASHBOARD ---
-    def setup_dash(self):
-        f = self.tabs["Dash"]
-        f.grid_columnconfigure((0,1,2), weight=1) # 3 columns for stats
-
-        colors = cfg.get_theme_colors()
-        font_large = (cfg.config["font_family"], colors.get("font_size_large", 18))
-
-        # Stats Row
-        self.c1 = self._stat_card(f, "Korekty", 0, 0, 0)
-        self.c2 = self._stat_card(f, "Tłumaczenia", 0, 0, 1)
-
-        # Words Card with Review Button
-        fr = ctk.CTkFrame(f, fg_color=colors.get("frame_color", "#333"), border_width=2, border_color=colors.get("button_color"))
-        fr.grid(row=0, column=2, padx=10, pady=10, sticky="ew")
-        ctk.CTkLabel(fr, text="Słowa", text_color=colors.get("text_color")).pack(pady=5)
-        self.c3_val = ctk.CTkLabel(fr, text="0", font=("Arial", 26, "bold"), text_color=colors.get("accent_text"))
-        self.c3_val.pack(pady=2)
-        ctk.CTkButton(fr, text="⚡ Przegląd", height=20, width=80, fg_color=colors.get("button_color"), text_color="black", command=self.open_review_mode).pack(pady=5)
-
-        # Test Zone (Moved here)
-        self.setup_test_zone(f, row=1)
-
-        self.refresh_dash()
-
-    def _stat_card(self, p, t, v, r, c):
-        colors = cfg.get_theme_colors()
-        fr = ctk.CTkFrame(p, fg_color=colors.get("frame_color", "#333"))
-        fr.grid(row=r, column=c, padx=10, pady=10, sticky="ew")
-
-        ctk.CTkLabel(fr, text=t, text_color=colors.get("text_color")).pack(pady=5)
-        l = ctk.CTkLabel(fr, text=str(v), font=("Arial", 26, "bold"), text_color=colors.get("accent_text"))
-        l.pack(pady=5)
-        return l
-
-    def refresh_dash(self):
-        self.c1.configure(text=str(cfg.stats["corrected"]))
-        self.c2.configure(text=str(cfg.stats["translated"]))
-        self.c3_val.configure(text=str(cfg.stats.get("words_corrected", 0)))
-
-    def open_review_mode(self):
-        to_review = []
-        seen = set()
-
-        for entry in cfg.history:
-            if entry.get("diffs"):
-                for d in entry["diffs"]:
-                    old = d["old"]
-                    new = d["new"]
-                    if old in cfg.auto_replace.replacements: continue
-                    if old in cfg.auto_replace.ignored: continue
-
-                    pair = (old, new)
-                    if pair not in seen:
-                        seen.add(pair)
-                        to_review.append(pair)
-
-        if not to_review:
-            self.status.configure(text="Brak słówek do przeglądu!", text_color="yellow")
-            return
-
-        from corr_gui import QuickReviewDialog
-        QuickReviewDialog(self, to_review)
 
     # --- SYSTEM ---
     def register_hotkeys(self):

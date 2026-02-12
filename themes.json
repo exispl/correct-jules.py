@@ -13,6 +13,34 @@
         "font_size_base": 14,
         "font_size_large": 18
     },
+    "Light": {
+        "fg_color": "#f0f0f0",
+        "text_color": "#333333",
+        "frame_color": "#dcdcdc",
+        "button_color": "#2CC985",
+        "button_hover": "#25A56D",
+        "accent_text": "#00695c",
+        "bubble_bg": "#b2dfdb",
+        "bubble_hover": "#80cbc4",
+        "input_bg": "#ffffff",
+        "history_bg": "#ffffff",
+        "font_size_base": 14,
+        "font_size_large": 18
+    },
+    "Creamy": {
+        "fg_color": "#f5f5dc",
+        "text_color": "#4a4a4a",
+        "frame_color": "#e6e6fa",
+        "button_color": "#e0ffff",
+        "button_hover": "#afeeee",
+        "accent_text": "#4682b4",
+        "bubble_bg": "#f0fff0",
+        "bubble_hover": "#98fb98",
+        "input_bg": "#fffacd",
+        "history_bg": "#fffff0",
+        "font_size_base": 14,
+        "font_size_large": 18
+    },
     "High Visibility": {
         "fg_color": "#000000",
         "text_color": "#FFFFFF",
