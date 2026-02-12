@@ -123,6 +123,13 @@ class MainApp(ctk.CTk):
                     self.refresh_dash()
                 elif msg == "STATUS":
                     self.status.configure(text=data['text'], text_color=data.get('color', 'white'))
+                elif msg == "INPUT":
+                    # data = {"title": "...", "prompt": "...", "event": evt, "result": res}
+                    d = ctk.CTkInputDialog(text=data['prompt'], title=data['title'])
+                    res_val = d.get_input()
+                    if res_val is not None:
+                        data['result'].append(res_val)
+                    data['event'].set()
         except queue.Empty: pass
         finally: self.after(200, self.check_queue)
 
@@ -144,10 +151,12 @@ class MainApp(ctk.CTk):
         top_frame = ctk.CTkFrame(f, fg_color="transparent")
         top_frame.grid(row=0, column=0, pady=(10, 5))
 
-        btn_rev = ctk.CTkButton(top_frame, text="⚡ PRZEGLĄD SŁÓW", width=300, height=50,
+        # Yellow Frame + "Shell32" style icon (Folder/Search)
+        btn_rev = ctk.CTkButton(top_frame, text="📂 PRZEGLĄD SŁÓW", width=300, height=50,
                                 font=("Arial", 18, "bold"),
-                                fg_color=colors.get("accent_text", "#2CC985"),
-                                text_color="black", # Contrast
+                                fg_color="#F1C40F", # Yellow
+                                hover_color="#D4AC0D",
+                                text_color="black",
                                 command=self.open_review_mode)
         btn_rev.pack()
 
@@ -158,6 +167,8 @@ class MainApp(ctk.CTk):
 
         self.test_in = ctk.CTkTextbox(input_container, width=800, height=160, font=font_large,
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
+        # Thick cursor
+        self.test_in.configure(insertwidth=5)
         self.test_in.grid(row=0, column=0, pady=5)
 
         # Focus input by default
@@ -232,7 +243,8 @@ class MainApp(ctk.CTk):
 
         self.out_text = tk.Text(self.out_frame, bg=colors.get("history_bg"), fg=colors.get("text_color"),
                                 font=font_large,
-                                relief="flat", wrap="word", padx=10, pady=10)
+                                relief="flat", wrap="word", padx=10, pady=10,
+                                insertwidth=5) # Thick cursor
         self.out_text.pack(fill="both", expand=True)
 
         # 6. Bottom Actions
@@ -284,8 +296,14 @@ class MainApp(ctk.CTk):
     def show_user_badge(self):
         colors = cfg.get_theme_colors()
         name = cfg.user_profile.get("name", "Gość")
-        badge = ctk.CTkLabel(self.tabs["Dash"], text=f"👤 {name}", text_color=colors.get("text_color"), fg_color=colors.get("frame_color"), corner_radius=10)
-        badge.place(relx=0.95, rely=0.02, anchor="ne")
+        # Larger Avatar (48px height approx via font + padding)
+        badge = ctk.CTkLabel(self.tabs["Dash"], text=f"👤 {name}",
+                             font=("Arial", 20, "bold"),
+                             height=48,
+                             text_color=colors.get("text_color"),
+                             fg_color=colors.get("frame_color"),
+                             corner_radius=24) # Rounded pill
+        badge.place(relx=0.98, rely=0.02, anchor="ne")
         badge.bind("<Button-1>", lambda e: self.logout())
 
     def logout(self):
@@ -524,7 +542,11 @@ class MainApp(ctk.CTk):
             t = data.get("type", "text")
             icon = "📝" if t == "text" else ("🚀" if t == "app" else "🤖")
 
-            ctk.CTkLabel(fr, text=f"{icon} {key}", font=("Consolas", 14, "bold"), text_color=colors.get("accent_text"), width=120, anchor="w").pack(side="left", padx=10)
+            # Larger Icon (32px font approx)
+            ctk.CTkLabel(fr, text=icon, font=("Arial", 32), width=50).pack(side="left", padx=5)
+
+            # Key
+            ctk.CTkLabel(fr, text=key, font=("Consolas", 16, "bold"), text_color=colors.get("accent_text"), width=100, anchor="w").pack(side="left", padx=5)
 
             content_prev = data['content'][:40] + "..." if len(data['content']) > 40 else data['content']
             ctk.CTkLabel(fr, text=content_prev, text_color=colors.get("text_color"), anchor="w").pack(side="left", fill="x", expand=True)
@@ -543,17 +565,17 @@ class MainApp(ctk.CTk):
 
     def edit_snippet(self, key):
         data = cfg.snippets.snippets[key]
-        self._snippet_dialog(key, data['content'], data.get('type', 'text'), data.get('hotkey', ''))
+        self._snippet_dialog(key, data['content'], data.get('type', 'text'), data.get('hotkey', ''), data.get('schedule'))
 
     def delete_snippet(self, key):
         cfg.snippets.remove_snippet(key)
         self.refresh_snip()
         self.status.configure(text=f"Usunięto snippet: {key}", text_color="red")
 
-    def _snippet_dialog(self, edit_key=None, edit_content=None, edit_type="text", edit_hotkey=""):
+    def _snippet_dialog(self, edit_key=None, edit_content=None, edit_type="text", edit_hotkey="", edit_schedule=None):
         d = ctk.CTkToplevel(self)
         d.title("Edytor Snippetu")
-        d.geometry("450x550")
+        d.geometry("500x750") # Taller for schedule
         d.attributes("-topmost", True)
 
         # Bind ESC to close snippet dialog too
@@ -562,17 +584,21 @@ class MainApp(ctk.CTk):
         colors = cfg.get_theme_colors()
         d.configure(fg_color=colors.get("fg_color"))
 
-        ctk.CTkLabel(d, text="Skrót tekstowy (np. ;tel):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
-        ent_key = ctk.CTkEntry(d)
-        ent_key.pack(fill="x", padx=20, pady=5)
+        # Scrollable container for dialog content
+        scroll = ctk.CTkScrollableFrame(d, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+        ctk.CTkLabel(scroll, text="Skrót tekstowy (np. ;tel):", text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(10,0))
+        ent_key = ctk.CTkEntry(scroll)
+        ent_key.pack(fill="x", padx=10, pady=5)
         if edit_key: ent_key.insert(0, edit_key)
 
-        ctk.CTkLabel(d, text="Typ Snippetu:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
-        combo_type = ctk.CTkComboBox(d, values=["text", "app", "macro"])
+        ctk.CTkLabel(scroll, text="Typ Snippetu:", text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(10,0))
+        combo_type = ctk.CTkComboBox(scroll, values=["text", "app", "macro"])
         combo_type.set(edit_type)
-        combo_type.pack(fill="x", padx=20, pady=5)
+        combo_type.pack(fill="x", padx=10, pady=5)
 
-        ctk.CTkLabel(d, text="Skrót klawiszowy:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        ctk.CTkLabel(scroll, text="Skrót klawiszowy:", text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(10,0))
 
         self.snippet_hk_var = tk.StringVar(value=edit_hotkey)
 
@@ -588,13 +614,50 @@ class MainApp(ctk.CTk):
             except:
                 btn_hk.configure(text="Błąd", fg_color="#555")
 
-        btn_hk = ctk.CTkButton(d, textvariable=self.snippet_hk_var, command=capture_snip_hk, fg_color="#555")
-        btn_hk.pack(fill="x", padx=20, pady=5)
+        btn_hk = ctk.CTkButton(scroll, textvariable=self.snippet_hk_var, command=capture_snip_hk, fg_color="#555")
+        btn_hk.pack(fill="x", padx=10, pady=5)
 
-        ctk.CTkLabel(d, text="Treść / Ścieżka / Makro:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
-        txt_content = ctk.CTkTextbox(d, height=120)
-        txt_content.pack(fill="both", expand=True, padx=20, pady=5)
+        ctk.CTkLabel(scroll, text="Treść / Ścieżka / Makro:", text_color=colors.get("text_color")).pack(anchor="w", padx=10, pady=(10,0))
+        txt_content = ctk.CTkTextbox(scroll, height=100)
+        txt_content.configure(insertwidth=5) # Thick cursor
+        txt_content.pack(fill="x", padx=10, pady=5)
         if edit_content: txt_content.insert("0.0", edit_content)
+
+        # --- SCHEDULING UI ---
+        ctk.CTkLabel(scroll, text="Harmonogram (Opcjonalny):", font=("Arial", 12, "bold"), text_color=colors.get("accent_text")).pack(anchor="w", padx=10, pady=(20,5))
+
+        sch_frame = ctk.CTkFrame(scroll, fg_color=colors.get("frame_color"))
+        sch_frame.pack(fill="x", padx=10, pady=5)
+
+        ctk.CTkLabel(sch_frame, text="Godziny (HH:MM):", text_color="gray").pack(pady=5)
+        time_row = ctk.CTkFrame(sch_frame, fg_color="transparent")
+        time_row.pack()
+
+        ent_start = ctk.CTkEntry(time_row, width=80, placeholder_text="08:00")
+        ent_start.pack(side="left", padx=5)
+        ctk.CTkLabel(time_row, text="-", text_color="gray").pack(side="left")
+        ent_end = ctk.CTkEntry(time_row, width=80, placeholder_text="16:00")
+        ent_end.pack(side="left", padx=5)
+
+        ctk.CTkLabel(sch_frame, text="Dni tygodnia:", text_color="gray").pack(pady=(10,5))
+        days_row = ctk.CTkFrame(sch_frame, fg_color="transparent")
+        days_row.pack(pady=5)
+
+        day_vars = []
+        days_labels = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"]
+        for i, lbl in enumerate(days_labels):
+            v = ctk.BooleanVar(value=True) # Default all checked
+            chk = ctk.CTkCheckBox(days_row, text=lbl, variable=v, width=40, font=("Arial", 10))
+            chk.pack(side="left", padx=2)
+            day_vars.append(v)
+
+        # Load existing schedule
+        if edit_schedule:
+            ent_start.insert(0, edit_schedule.get("start", ""))
+            ent_end.insert(0, edit_schedule.get("end", ""))
+            if "days" in edit_schedule:
+                for i, v in enumerate(day_vars):
+                    v.set(i in edit_schedule["days"])
 
         def save():
             k = ent_key.get().strip()
@@ -602,15 +665,28 @@ class MainApp(ctk.CTk):
             c = txt_content.get("0.0", "end").strip()
             t = combo_type.get()
 
+            # Schedule Parse
+            sch = None
+            s_t = ent_start.get().strip()
+            e_t = ent_end.get().strip()
+            sel_days = [i for i, v in enumerate(day_vars) if v.get()]
+
+            if s_t or e_t or len(sel_days) < 7:
+                sch = {
+                    "start": s_t if s_t else "00:00",
+                    "end": e_t if e_t else "23:59",
+                    "days": sel_days
+                }
+
             if k and c:
                 if edit_key and edit_key != k:
                     cfg.snippets.remove_snippet(edit_key)
 
-                cfg.snippets.add_snippet(k, c, type=t, hotkey=hk)
+                cfg.snippets.add_snippet(k, c, type=t, hotkey=hk, schedule=sch)
                 self.refresh_snip()
                 d.destroy()
 
-        ctk.CTkButton(d, text="Zapisz", command=save, fg_color=colors.get("button_color"), text_color="black", height=40).pack(fill="x", padx=20, pady=20)
+        ctk.CTkButton(scroll, text="Zapisz", command=save, fg_color=colors.get("button_color"), text_color="black", height=40).pack(fill="x", padx=10, pady=20)
 
     # --- INFO ---
     def setup_info(self):
@@ -649,39 +725,63 @@ class MainApp(ctk.CTk):
 
         colors = cfg.get_theme_colors()
 
-        ctk.CTkLabel(f, text="Suno Automation", font=("Arial", 24, "bold"), text_color=colors.get("accent_text")).pack(pady=20)
+        ctk.CTkLabel(f, text="Suno Automation", font=("Arial", 24, "bold"), text_color=colors.get("accent_text")).pack(pady=10)
 
         ctk.CTkButton(f, text="Otwórz suno.com/create", command=lambda: webbrowser.open("https://suno.com/create"),
                       width=200, height=40, fg_color=colors.get("button_color"), text_color="black").pack(pady=10)
 
-        # Form filler macro simulation
-        ctk.CTkLabel(f, text="Makro Wypełniania (Symulacja)", font=("Arial", 16, "bold")).pack(pady=(20,10))
+        # Custom Mode Fields
+        ctk.CTkLabel(f, text="Lyrics:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        self.suno_lyrics = ctk.CTkTextbox(f, height=120)
+        self.suno_lyrics.configure(insertwidth=5)
+        self.suno_lyrics.pack(fill="x", padx=20, pady=5)
 
-        self.suno_prompt = ctk.CTkTextbox(f, height=100, width=400)
-        self.suno_prompt.pack(pady=5)
-        self.suno_prompt.insert("0.0", "Wpisz opis piosenki tutaj...")
+        ctk.CTkLabel(f, text="Style of Music:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        self.suno_style = ctk.CTkEntry(f)
+        self.suno_style.pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkButton(f, text="🚀 Uruchom Makro", command=self.run_suno_macro,
-                      width=200, height=50, fg_color="#FF4747", text_color="white").pack(pady=10)
+        ctk.CTkLabel(f, text="Title:", text_color=colors.get("text_color")).pack(anchor="w", padx=20)
+        self.suno_title = ctk.CTkEntry(f)
+        self.suno_title.pack(fill="x", padx=20, pady=5)
 
-    def run_suno_macro(self):
-        # Open site and type
+        ctk.CTkButton(f, text="🚀 AUTO-FILL (Custom Mode)", command=self.run_suno_autofill,
+                      width=250, height=50, fg_color="#F1C40F", text_color="black").pack(pady=20)
+
+        ctk.CTkLabel(f, text="Instrukcja: Kliknij przycisk, strona się otworzy.\nMasz 5 sekund na kliknięcie w pole 'Lyrics' na stronie Suno.\nSkrypt wypełni resztę (używając Tab).", text_color="gray").pack(pady=10)
+
+    def run_suno_autofill(self):
+        l = self.suno_lyrics.get("0.0", "end").strip()
+        s = self.suno_style.get().strip()
+        t = self.suno_title.get().strip()
+
         webbrowser.open("https://suno.com/create")
-        self.status.configure(text="Czekam 5s na załadowanie strony...", text_color="yellow")
+        self.status.configure(text="⏳ Kliknij w pole LYRICS w ciągu 5 sekund...", text_color="yellow")
 
-        def _macro():
+        def _fill():
             time.sleep(5)
-            # Simulate tab navigation and typing
-            # This is fragile without visual feedback but serves the "macro" request
-            text = self.suno_prompt.get("0.0", "end").strip()
+            # Sequence: Type Lyrics -> TAB -> Type Style -> TAB -> Type Title
+            if l:
+                keyboard.write(l)
+                time.sleep(0.5)
 
-            # Assuming focus starts somewhere, usually need to click.
-            # Keyboard only: Tab, Tab...
-            # This is a placeholder for the actual macro logic user requested.
-            keyboard.write(text)
-            self.status.configure(text="Makro wykonane.", text_color="green")
+            # Navigate to Style
+            keyboard.send("tab")
+            time.sleep(0.5)
 
-        threading.Thread(target=_macro, daemon=True).start()
+            if s:
+                keyboard.write(s)
+                time.sleep(0.5)
+
+            # Navigate to Title
+            keyboard.send("tab")
+            time.sleep(0.5)
+
+            if t:
+                keyboard.write(t)
+
+            gui_queue.put(("STATUS", {"text": "✅ Formularz wypełniony!", "color": "green"}))
+
+        threading.Thread(target=_fill, daemon=True).start()
 
     # --- HISTORY ---
     def setup_hist(self):
@@ -759,6 +859,8 @@ class MainApp(ctk.CTk):
             ctk.CTkLabel(fr, text=label, width=120, anchor="w", text_color=colors.get("text_color")).pack(side="left")
 
             curr_val = cfg.config.get(key, "Brak")
+            # Force Uppercase for display
+            if curr_val: curr_val = curr_val.upper()
             self.hotkey_vars[key] = tk.StringVar(value=curr_val)
 
             btn = ctk.CTkButton(fr, textvariable=self.hotkey_vars[key], width=200,
@@ -772,6 +874,14 @@ class MainApp(ctk.CTk):
                     hk = keyboard.read_hotkey(suppress=False)
                     # UPPERCASE FORMATTING
                     hk = hk.upper().replace("+", " + ")
+
+                    # Safety Check
+                    forbidden = ["CTRL", "SHIFT", "ALT", "WIN", "ESC", "ENTER", "SPACE", "BACKSPACE", "TAB"]
+                    if hk in forbidden:
+                         self.hotkey_vars[k].set("Błąd: Zły Klawisz")
+                         b.configure(fg_color=colors.get("input_bg"))
+                         self.status.configure(text=f"Nie można przypisać samego klawisza: {hk}", text_color="red")
+                         return
 
                     self.hotkey_vars[k].set(hk)
                     cfg.config[k] = hk

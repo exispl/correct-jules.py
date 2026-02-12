@@ -248,8 +248,16 @@ class SnippetManager:
         with open(self.file, "w", encoding="utf-8") as f:
             json.dump(self.snippets, f, indent=4, ensure_ascii=False)
 
-    def add_snippet(self, key, content, type="text", hotkey=None):
-        self.snippets[key] = {"content": content, "type": type, "hotkey": hotkey}
+    def add_snippet(self, key, content, type="text", hotkey=None, schedule=None):
+        """
+        schedule: dict {"start": "HH:MM", "end": "HH:MM", "days": [0,1,2...]} or None
+        """
+        self.snippets[key] = {
+            "content": content,
+            "type": type,
+            "hotkey": hotkey,
+            "schedule": schedule
+        }
         self.save()
 
     def remove_snippet(self, key):

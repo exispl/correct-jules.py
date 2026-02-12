@@ -39,12 +39,55 @@ class ActionWorker:
         content = data['content']
         type_s = data.get('type', 'text')
 
+        # --- SCHEDULING CHECK ---
+        schedule = data.get("schedule")
+        if schedule:
+            from datetime import datetime
+            now = datetime.now()
+            # Days
+            if "days" in schedule and schedule["days"]:
+                if now.weekday() not in schedule["days"]:
+                    gui_queue.put(("STATUS", {"text": f"Snippet {key}: Zły dzień", "color": "orange"}))
+                    return
+            # Time
+            try:
+                s_str = schedule.get("start", "00:00")
+                e_str = schedule.get("end", "23:59")
+                s_t = datetime.strptime(s_str, "%H:%M").time()
+                e_t = datetime.strptime(e_str, "%H:%M").time()
+                curr_t = now.time()
+                if not (s_t <= curr_t <= e_t):
+                    gui_queue.put(("STATUS", {"text": f"Snippet {key}: Poza godzinami ({s_str}-{e_str})", "color": "orange"}))
+                    return
+            except: pass
+
+        # --- ARGS CHECK ({}) ---
+        if "{}" in content:
+            import threading
+            evt = threading.Event()
+            res = []
+            gui_queue.put(("INPUT", {"title": f"Argumenty: {key}", "prompt": "Wpisz wartość dla {}:", "event": evt, "result": res}))
+            evt.wait() # Wait for UI thread
+            if res and res[0]:
+                content = content.replace("{}", res[0])
+            else:
+                gui_queue.put(("STATUS", {"text": "Anulowano (brak args)", "color": "orange"}))
+                return
+
         time.sleep(0.1)
 
         if type_s == 'text':
-            # Support multiple lines correctly
-            keyboard.write(content)
-            gui_queue.put(("STATUS", {"text": f"Snippet: {key}", "color": "#4aa3df"}))
+            # NEW: Paste from clipboard for speed (as requested)
+            try:
+                import pyperclip
+                pyperclip.copy(content)
+                time.sleep(0.05) # Wait for clipboard to update
+                keyboard.send('ctrl+v')
+                gui_queue.put(("STATUS", {"text": f"Wklejono: {key}", "color": "#4aa3df"}))
+            except Exception as e:
+                # Fallback if clipboard fails
+                keyboard.write(content)
+                gui_queue.put(("STATUS", {"text": f"Wpisano (Fallback): {key}", "color": "#4aa3df"}))
 
         elif type_s == 'app':
             import subprocess, os
