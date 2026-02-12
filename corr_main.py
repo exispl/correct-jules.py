@@ -297,7 +297,7 @@ class MainApp(ctk.CTk):
         if self.login_frame:
             self.login_frame.destroy()
         cfg.user_profile = {
-            "name": "Kamil Kowalski",
+            "name": "Kamil Kowalczyk",
             "email": "kamil@kowalczyk.com",
             "photo": "",
             "logged_in": True
@@ -609,7 +609,7 @@ class MainApp(ctk.CTk):
 
         ctk.CTkLabel(f, text="AI Assistant Pro v0.2.1", font=("Arial", 24, "bold"), text_color=colors.get("accent_text")).pack(pady=10)
         ctk.CTkLabel(f, text="Aplikacja stworzona do automatyzacji, korekty tekstu i zarządzania snippetami.", text_color=colors.get("text_color")).pack()
-        ctk.CTkLabel(f, text="Kamil Kowalski © 2024", text_color="gray").pack(pady=5)
+        ctk.CTkLabel(f, text="Kamil Kowalczyk © 2024", text_color="gray").pack(pady=5)
 
         ctk.CTkLabel(f, text="Plany na przyszłość:", font=("Arial", 16, "bold"), text_color=colors.get("text_color")).pack(pady=(30,10))
         plans = [
