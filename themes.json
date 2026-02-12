@@ -1,38 +1,30 @@
 {
-  "Dark": {
-    "fg_color": "#212121",
-    "text_color": "white",
-    "frame_color": "#333333",
-    "button_color": "#2CC985",
-    "button_hover": "#25A56D",
-    "accent_text": "#2CC985",
-    "bubble_bg": "#00695c",
-    "bubble_hover": "#004d40",
-    "input_bg": "#1a1a1a",
-    "history_bg": "#2b2b2b"
-  },
-  "Light": {
-    "fg_color": "#f0f0f0",
-    "text_color": "black",
-    "frame_color": "#ffffff",
-    "button_color": "#2CC985",
-    "button_hover": "#25A56D",
-    "accent_text": "#008060",
-    "bubble_bg": "#b2dfdb",
-    "bubble_hover": "#80cbc4",
-    "input_bg": "#ffffff",
-    "history_bg": "#e0e0e0"
-  },
-  "Creamy": {
-    "fg_color": "#F3E5AB",
-    "text_color": "#4A4A4A",
-    "frame_color": "#FFF8E1",
-    "button_color": "#81C784",
-    "button_hover": "#66BB6A",
-    "accent_text": "#388E3C",
-    "bubble_bg": "#A5D6A7",
-    "bubble_hover": "#81C784",
-    "input_bg": "#FFFDE7",
-    "history_bg": "#FFF9C4"
-  }
+    "Dark": {
+        "fg_color": "#212121",
+        "text_color": "white",
+        "frame_color": "#333333",
+        "button_color": "#2CC985",
+        "button_hover": "#25A56D",
+        "accent_text": "#2CC985",
+        "bubble_bg": "#00695c",
+        "bubble_hover": "#004d40",
+        "input_bg": "#1a1a1a",
+        "history_bg": "#2b2b2b",
+        "font_size_base": 14,
+        "font_size_large": 18
+    },
+    "High Visibility": {
+        "fg_color": "#000000",
+        "text_color": "#FFFFFF",
+        "frame_color": "#1A1A1A",
+        "button_color": "#FFFF00",
+        "button_hover": "#CCCC00",
+        "accent_text": "#FFFF00",
+        "bubble_bg": "#333333",
+        "bubble_hover": "#555555",
+        "input_bg": "#000000",
+        "history_bg": "#111111",
+        "font_size_base": 19,
+        "font_size_large": 24
+    }
 }

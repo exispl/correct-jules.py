@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
     "font_family": "Segoe UI",
     "font_size": 18,
     "theme": "Dark",
+    "icons_path": "D:\\exis\\Icons",
     "prompts": {
         "CORRECT": "Jesteś ekspertem językowym. Popraw błędy w tekście. Zwróć TYLKO poprawiony tekst.",
         "TRANSLATE_AUTO": "Jesteś tłumaczem. Jeśli tekst jest PL -> na EN. Jeśli inny -> na PL. Zwróć TYLKO tłumaczenie.",
@@ -86,7 +87,9 @@ class ConfigManager:
             "fg_color": "#212121", "text_color": "white", "frame_color": "#333333",
             "button_color": "#2CC985", "button_hover": "#25A56D", "accent_text": "#2CC985",
             "bubble_bg": "#00695c", "bubble_hover": "#004d40", "input_bg": "#1a1a1a",
-            "history_bg": "#2b2b2b"
+            "history_bg": "#2b2b2b",
+            "font_size_base": 14,
+            "font_size_large": 18
         }
 
     def load_config(self):
@@ -126,7 +129,7 @@ class ConfigManager:
             json.dump({"history": self.history, "stats": self.stats}, f, indent=4, ensure_ascii=False)
 
     def get_version(self):
-        return "v0.1.12"
+        return "v0.2.0"
 
     def add_history_entry(self, type_str, original, result, duration, diffs=None):
         entry = {
