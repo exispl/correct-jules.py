@@ -23,6 +23,9 @@ class MainApp(ctk.CTk):
         self.geometry("1300x900")
         self.protocol("WM_DELETE_WINDOW", self.hide_window)
 
+        # ESC to close/hide
+        self.bind("<Escape>", lambda e: self.hide_window())
+
         self.update_theme()
 
         # Menu Bar
@@ -32,8 +35,18 @@ class MainApp(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
+        # Font for tabs needs to be set via font config in CTkTabview?
+        # Actually standard CTkTabview doesn't easily expose tab font size.
+        # But we can try to configure it.
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
+
+        # Configure Tab Font
+        # self.tabview._segmented_button.configure(font=ctk.CTkFont(family=cfg.config["font_family"], size=16, weight="bold"))
+        # Accessing private member is risky but common in CTk customization.
+        try:
+             self.tabview._segmented_button.configure(font=ctk.CTkFont(family=cfg.config["font_family"], size=16, weight="bold"))
+        except: pass
 
         self.tabs = {
             "Dash": self.tabview.add("Dashboard"),
@@ -128,7 +141,6 @@ class MainApp(ctk.CTk):
         font_lato = ("Lato", 20, "bold") # Hardcoded Lato as requested, or fallback if system matches
 
         # 1. Review Button (Top, Centered, Large, Shadow)
-        # Using a Frame for shadow effect simulation or just distinctive color
         top_frame = ctk.CTkFrame(f, fg_color="transparent")
         top_frame.grid(row=0, column=0, pady=(10, 5))
 
@@ -138,16 +150,11 @@ class MainApp(ctk.CTk):
                                 text_color="black", # Contrast
                                 command=self.open_review_mode)
         btn_rev.pack()
-        # "Shadow" label behind? Hard in CTk. We rely on color.
 
         # 2. Input Textbox (Centered, Narrower, Taller)
         input_container = ctk.CTkFrame(f, fg_color="transparent")
         input_container.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         input_container.grid_columnconfigure(0, weight=1)
-
-        # We want input to be narrower, so we can use padding or fixed width?
-        # "troszkę węższe, tak gdzieś o 300 pikseli". Window is 1200. So ~900 width.
-        # "troszkę wyższe, o jakieś 50 pikseli". Normal is maybe 100 -> 150.
 
         self.test_in = ctk.CTkTextbox(input_container, width=800, height=160, font=font_large,
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
@@ -156,13 +163,7 @@ class MainApp(ctk.CTk):
         # Focus input by default
         self.after(200, lambda: self.test_in.focus_set())
 
-        # 3. Paste Buttons (Under Input? User said "Tuż pod tym polem niech będą te przyciski, te batony: korekta...")
-        # Wait, user said "Tuż pod tym polem niech będą te przyciski, te batony: korekta...".
-        # BUT earlier: "pamiętaj, żeby te przyciski do wklejenia... Nie będą na środku, większy odstęp...".
-        # Let's put Paste buttons to the LEFT and RIGHT of the input? Or above?
-        # "przyciski do wklejenia... Nie będą na środku".
-        # Let's put them in a row ABOVE the Action Buttons but BELOW Input?
-
+        # 3. Paste Buttons
         action_area = ctk.CTkFrame(f, fg_color="transparent")
         action_area.grid(row=3, column=0, pady=10)
 
@@ -170,11 +171,10 @@ class MainApp(ctk.CTk):
         paste_frame = ctk.CTkFrame(action_area, fg_color="transparent")
         paste_frame.pack(pady=10)
 
-        # "Większy odstęp"
         btn_paste = ctk.CTkButton(paste_frame, text="WKLEJ TEKST", width=200, height=60,
                                   font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
                                   command=lambda: self.paste_to_input())
-        btn_paste.pack(side="left", padx=40) # Big spacing
+        btn_paste.pack(side="left", padx=40)
 
         btn_hist = ctk.CTkButton(paste_frame, text="HISTORIA (Win+V)", width=200, height=60,
                                  font=("Arial", 16, "bold"), fg_color=colors.get("button_color"), text_color="black",
@@ -182,17 +182,16 @@ class MainApp(ctk.CTk):
         btn_hist.pack(side="left", padx=40)
 
         # 4. Action Buttons (2 Rows, Lato, Large)
-        # Rows:
-        # 1: Korekta, Tłumacz
-        # 2: Streszcz, Ton, Wyjaśnij
-
         act_frame = ctk.CTkFrame(action_area, fg_color="transparent")
         act_frame.pack(pady=10)
 
         def mk_btn(parent, txt, code):
-            return ctk.CTkButton(parent, text=txt, command=lambda: self.run_dashboard_action(code),
+            b = ctk.CTkButton(parent, text=txt, command=lambda: self.run_dashboard_action(code),
                                  font=font_lato, width=220, height=50,
                                  fg_color=colors.get("button_color"), text_color="black")
+            # Bind Right Click for disable menu
+            b.bind("<Button-3>", lambda e, c=code: self.show_disable_menu(e, c))
+            return b
 
         r1 = ctk.CTkFrame(act_frame, fg_color="transparent")
         r1.pack(pady=5)
@@ -206,8 +205,6 @@ class MainApp(ctk.CTk):
         mk_btn(r2, "WYJAŚNIENIE", "EXPLAIN").pack(side="left", padx=10)
 
         # 5. Output Area
-        # "Wynik:" label above?
-
         self.out_frame = ctk.CTkFrame(f, fg_color=colors.get("history_bg"))
         self.out_frame.grid(row=4, column=0, sticky="nsew", padx=20, pady=5)
 
@@ -216,7 +213,7 @@ class MainApp(ctk.CTk):
                                 relief="flat", wrap="word", padx=10, pady=10)
         self.out_text.pack(fill="both", expand=True)
 
-        # 6. Bottom Actions (Accept, Reset)
+        # 6. Bottom Actions
         bot_frame = ctk.CTkFrame(f, fg_color="transparent")
         bot_frame.grid(row=5, column=0, pady=10)
 
@@ -226,8 +223,25 @@ class MainApp(ctk.CTk):
         ctk.CTkButton(bot_frame, text="RESETUJ", width=150, height=40, fg_color="#FF4747", text_color="white",
                       command=self.reset_output).pack(side="left", padx=10)
 
+        # Context Menu for Disable
+        self.disable_menu = tk.Menu(self, tearoff=0)
+
         # Context Menu for Textbox
         self.menu = tk.Menu(self, tearoff=0, bg=colors.get("frame_color"), fg=colors.get("text_color"))
+
+    def show_disable_menu(self, event, action_code):
+        self.disable_menu.delete(0, "end")
+
+        self.disable_menu.add_command(label="Wyłącz", command=lambda: self.disable_func(action_code, -1))
+        self.disable_menu.add_command(label="Wyłącz na 6 godzin", command=lambda: self.disable_func(action_code, 6))
+        self.disable_menu.add_command(label="Wyłącz na 12 godzin", command=lambda: self.disable_func(action_code, 12))
+        self.disable_menu.add_command(label="Wyłącz do ponownego uruchomienia", command=lambda: self.disable_func(action_code, None))
+
+        self.disable_menu.tk_popup(event.x_root, event.y_root)
+
+    def disable_func(self, code, hours):
+        cfg.disable_function(code, hours)
+        self.status.configure(text=f"Funkcja {code} została wyłączona.", text_color="yellow")
 
     def paste_to_input(self):
         try:
@@ -246,9 +260,6 @@ class MainApp(ctk.CTk):
         except: pass
 
     def show_user_badge(self):
-        # Badge logic remains similar, maybe move if layout changed?
-        # Dashboard grid changed. Let's put badge in absolute position or status bar?
-        # Absolute is fine.
         colors = cfg.get_theme_colors()
         name = cfg.user_profile.get("name", "Gość")
         badge = ctk.CTkLabel(self.tabs["Dash"], text=f"👤 {name}", text_color=colors.get("text_color"), fg_color=colors.get("frame_color"), corner_radius=10)
@@ -300,6 +311,11 @@ class MainApp(ctk.CTk):
         self.status.configure(text="Tryb Gościa.", text_color="gray")
 
     def run_dashboard_action(self, action_code):
+        # Check if enabled
+        if not cfg.is_function_enabled(action_code):
+            self.status.configure(text=f"Funkcja {action_code} jest wyłączona.", text_color="red")
+            return
+
         txt = self.test_in.get("0.0", "end").strip()
         if not txt: return
         self.status.configure(text=f"AI pracuje ({action_code})...", text_color="yellow")
@@ -338,10 +354,7 @@ class MainApp(ctk.CTk):
                 new_phrase = " ".join(res_words[j1:j2])
                 old_phrase = " ".join(orig_words[i1:i2])
                 btn = BubbleButton(self.out_text, text=new_phrase, original_text=old_phrase)
-                # Bind events
                 btn.bind("<Button-1>", lambda e, b=btn: self.show_bubble_menu(e, b))
-                # Right click -> handled inside BubbleButton class now? Or bind here too?
-                # Using class binding is cleaner but we need menu access.
                 btn.bind("<Button-3>", lambda e, b=btn: self.show_bubble_menu(e, b))
 
                 self.out_text.window_create("end", window=btn)
@@ -401,13 +414,8 @@ class MainApp(ctk.CTk):
             btn.configure(text=res)
 
     def accept_all_bubbles(self):
-        # Iterate all widgets in text
-        # This is hard because Text widget manages windows.
-        # We can iterate children of text widget?
-        # Yes, bubbles are children of self.out_text
         for child in self.out_text.winfo_children():
             if isinstance(child, BubbleButton):
-                # Check if it's already resolved (transparent)
                 if child.cget("fg_color") != "transparent":
                      self.resolve_bubble(child, child.cget("text"))
         self.status.configure(text="Zaakceptowano wszystkie zmiany.", text_color="green")
@@ -445,10 +453,8 @@ class MainApp(ctk.CTk):
             ctk.CTkLabel(r, text=k, font=("Consolas", 12, "bold"), width=150, anchor="e", text_color=colors.get("text_color")).pack(side="left")
             ctk.CTkLabel(r, text=d, text_color="gray", anchor="w").pack(side="left", padx=10)
 
-        # FIXED PATH: Shortcuts (not Shortuts)
         target_dir = r"C:\Users\kamil\Pictures\Screenshots\Shortcuts"
         if not os.path.exists(target_dir):
-             # Try typo path just in case
              typo = r"C:\Users\kamil\Pictures\Screenshots\Shortuts"
              if os.path.exists(typo): target_dir = typo
 
@@ -471,35 +477,6 @@ class MainApp(ctk.CTk):
         for w in f.winfo_children(): w.destroy()
 
         colors = cfg.get_theme_colors()
-        font_base = (cfg.config["font_family"], colors.get("font_size_base", 14))
-
-        # Grid of Icons (Top) - "Szybkie Akcje"
-        icons_path = cfg.config.get("icons_path", "")
-        if icons_path and os.path.exists(icons_path):
-            ctk.CTkLabel(f, text="Szybkie Akcje (Kopiuj obraz)", font=("Arial", 16, "bold"), text_color=colors.get("accent_text")).pack(pady=5)
-            icon_frame = ctk.CTkScrollableFrame(f, height=180, fg_color="transparent", orientation="horizontal")
-            icon_frame.pack(fill="x", padx=5, pady=5)
-
-            try:
-                # Recursively or just top level? Assuming top level or flat
-                # User mentioned "D:\exis\Icons\neue 3xxx" later for logo, so maybe deep?
-                # Just listing top level for now or specific subfolder if configured
-                files = []
-                for root, dirs, filenames in os.walk(icons_path):
-                    for filename in filenames:
-                        if filename.lower().endswith((".png", ".ico", ".jpg")):
-                            files.append(os.path.join(root, filename))
-                    break # Just top level for grid? Or flatten all? Let's do top level for now.
-
-                for file_path in files[:20]: # Limit to avoid lag if thousands
-                    name = os.path.splitext(os.path.basename(file_path))[0]
-                    # Display button
-                    btn = ctk.CTkButton(icon_frame, text=name[:10], width=80, height=80,
-                                        fg_color=colors.get("button_color"), text_color="black",
-                                        command=lambda p=file_path: self.copy_image_to_clipboard(p))
-                    btn.pack(side="left", padx=5)
-            except Exception as e:
-                ctk.CTkLabel(icon_frame, text=f"Błąd: {e}").pack()
 
         # Tools
         tool_bar = ctk.CTkFrame(f, fg_color="transparent")
@@ -513,38 +490,6 @@ class MainApp(ctk.CTk):
         self.snip_scroll = ctk.CTkScrollableFrame(f)
         self.snip_scroll.pack(fill="both", expand=True, padx=5, pady=5)
         self.refresh_snip()
-
-    def copy_image_to_clipboard(self, path):
-        # Requires extra libs usually, but let's try basic Powershell clip or simple open
-        # Or use Pillow + Win32
-        # For simplicity in this env, we might just put path?
-        # User said "dać właśnie obrazki bezpośrednio".
-        # Let's try to use a simple hack with standard clipboard if possible, or just skip if complex deps missing.
-        # Actually we can use `clip` command for text, but for images...
-        # We'll just notify feature limitation if win32clipboard not available
-        try:
-            import win32clipboard
-            from PIL import Image
-            from io import BytesIO
-
-            image = Image.open(path)
-            output = BytesIO()
-            image.convert("RGB").save(output, "BMP")
-            data = output.getvalue()[14:]
-            output.close()
-
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
-            win32clipboard.CloseClipboard()
-            self.status.configure(text=f"Skopiowano obraz: {os.path.basename(path)}", text_color="green")
-        except ImportError:
-            self.status.configure(text="Brak biblioteki win32clipboard!", text_color="red")
-        except Exception as e:
-            self.status.configure(text=f"Błąd kopiowania: {e}", text_color="red")
-
-    def run_icon_action(self, name):
-        pass # Replaced by copy_image
 
     def refresh_snip(self):
         for w in self.snip_scroll.winfo_children(): w.destroy()
@@ -589,6 +534,9 @@ class MainApp(ctk.CTk):
         d.geometry("450x550")
         d.attributes("-topmost", True)
 
+        # Bind ESC to close snippet dialog too
+        d.bind("<Escape>", lambda e: d.destroy())
+
         colors = cfg.get_theme_colors()
         d.configure(fg_color=colors.get("fg_color"))
 
@@ -611,6 +559,8 @@ class MainApp(ctk.CTk):
             d.update()
             try:
                 hk = keyboard.read_hotkey(suppress=False)
+                # FORMAT UPPERCASE
+                hk = hk.upper().replace("+", " + ")
                 self.snippet_hk_var.set(hk)
                 btn_hk.configure(text=hk, fg_color="#555")
             except:
@@ -626,7 +576,7 @@ class MainApp(ctk.CTk):
 
         def save():
             k = ent_key.get().strip()
-            hk = self.snippet_hk_var.get().strip().lower()
+            hk = self.snippet_hk_var.get().strip()
             c = txt_content.get("0.0", "end").strip()
             t = combo_type.get()
 
@@ -791,6 +741,9 @@ class MainApp(ctk.CTk):
                 self.update()
                 try:
                     hk = keyboard.read_hotkey(suppress=False)
+                    # UPPERCASE FORMATTING
+                    hk = hk.upper().replace("+", " + ")
+
                     self.hotkey_vars[k].set(hk)
                     cfg.config[k] = hk
                     cfg.save_config()
@@ -896,7 +849,9 @@ class MainApp(ctk.CTk):
             for cfg_key, action in actions:
                 hk = cfg.config.get(cfg_key)
                 if hk and hk != "Brak":
-                    keyboard.add_hotkey(hk, lambda a=action: worker.trigger(a))
+                    # Remove spaces for binding logic, keep for display
+                    hk_bind = hk.replace(" ", "")
+                    keyboard.add_hotkey(hk_bind, lambda a=action: worker.trigger(a))
 
             keyboard.add_hotkey("f1", self.show_window)
         except Exception as e:

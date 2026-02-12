@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import queue
 import warnings
@@ -15,21 +15,21 @@ ctk.set_default_color_theme("green")
 CONFIG_FILE = "config.json"
 HISTORY_FILE = "history.json"
 
-# Lista nowoczesnych czcionek (system musi je mieć zainstalowane, inaczej fallback do Arial)
 FONTS = ["Roboto", "Segoe UI", "Arial", "Helvetica", "Montserrat", "Lato", "Open Sans"]
 
 DEFAULT_CONFIG = {
     "api_key": "",
-    "model": "llama-3.3-70b-versatile",  # Aktualny, szybki model Groq
-    "hotkey_correct": "ctrl+F6",
-    "hotkey_translate": "ctrl+F7",
-    "hotkey_summarize": "ctrl+F8",
-    "hotkey_tone": "ctrl+F9",
-    "hotkey_explain": "ctrl+F10",
+    "model": "llama-3.3-70b-versatile",
+    "hotkey_correct": "CTRL + F6",
+    "hotkey_translate": "CTRL + F7",
+    "hotkey_summarize": "CTRL + F8",
+    "hotkey_tone": "CTRL + F9",
+    "hotkey_explain": "CTRL + F10",
     "font_family": "Segoe UI",
     "font_size": 18,
     "theme": "Light",
     "icons_path": "D:\\exis\\Icons",
+    "disabled_functions": {}, # key: timestamp (float)
     "prompts": {
         "CORRECT": "Jesteś ekspertem językowym. Popraw błędy w tekście. Zwróć TYLKO poprawiony tekst.",
         "TRANSLATE_AUTO": "Jesteś tłumaczem. Jeśli tekst jest PL -> na EN. Jeśli inny -> na PL. Zwróć TYLKO tłumaczenie.",
@@ -47,7 +47,6 @@ DEFAULT_CONFIG = {
     ]
 }
 
-# Global queue for GUI updates
 gui_queue = queue.Queue()
 
 class ConfigManager:
@@ -71,25 +70,26 @@ class ConfigManager:
 
         self.load_themes()
 
+        # Ensure new keys
+        if "disabled_functions" not in self.config:
+            self.config["disabled_functions"] = {}
+
     def load_themes(self):
         try:
             with open("themes.json", "r", encoding="utf-8") as f:
                 self.themes = json.load(f)
         except Exception:
-            self.themes = {} # Fallback
+            self.themes = {}
 
     def get_theme_colors(self):
-        theme_name = self.config.get("theme", "Dark")
+        theme_name = self.config.get("theme", "Light")
         if theme_name in self.themes:
             return self.themes[theme_name]
-        # Default Dark theme fallback if json missing
         return {
             "fg_color": "#212121", "text_color": "white", "frame_color": "#333333",
             "button_color": "#2CC985", "button_hover": "#25A56D", "accent_text": "#2CC985",
             "bubble_bg": "#00695c", "bubble_hover": "#004d40", "input_bg": "#1a1a1a",
-            "history_bg": "#2b2b2b",
-            "font_size_base": 14,
-            "font_size_large": 18
+            "history_bg": "#2b2b2b"
         }
 
     def load_config(self):
@@ -139,7 +139,7 @@ class ConfigManager:
             "original": original,
             "result": result,
             "duration": round(duration, 3),
-            "diffs": diffs if diffs else [] # Lista zmienionych słów
+            "diffs": diffs if diffs else []
         }
         self.history.insert(0, entry)
         if len(self.history) > 50: self.history.pop()
@@ -147,12 +147,50 @@ class ConfigManager:
         if type_str == "CORRECT": self.stats["corrected"] += 1
         elif type_str == "TRANSLATE": self.stats["translated"] += 1
 
-        # Count words corrected
         if diffs:
             self.stats["words_corrected"] = self.stats.get("words_corrected", 0) + len(diffs)
 
         self.stats["saved_time_s"] += duration
         self.save_history()
+
+    def disable_function(self, func_name, hours=None):
+        if hours is None: # Until restart (special value -1 or just volatile)
+            # Actually user wants "until restart".
+            # If we save to file, it persists.
+            # So "until restart" means we set a flag in memory OR timestamp=0 and handle it on load?
+            # Easiest: timestamp 0 = disabled until restart. Cleared on init?
+            # Wait, init loads from file. If we save 0, it persists.
+            # So for "until restart", we should NOT save to file, or save a special marker.
+            # Let's use a memory-only set for "until restart".
+            self.session_disabled_funcs = getattr(self, "session_disabled_funcs", set())
+            self.session_disabled_funcs.add(func_name)
+            return
+
+        # Permanent / Timed
+        if hours == -1: # Forever (until manually enabled)
+             exp = 9999999999.9
+        else:
+             exp = time.time() + (hours * 3600)
+
+        self.config["disabled_functions"][func_name] = exp
+        self.save_config()
+
+    def is_function_enabled(self, func_name):
+        # 1. Check session disable
+        if hasattr(self, "session_disabled_funcs") and func_name in self.session_disabled_funcs:
+            return False
+
+        # 2. Check config disable
+        if func_name in self.config["disabled_functions"]:
+            exp = self.config["disabled_functions"][func_name]
+            if time.time() < exp:
+                return False
+            else:
+                # Expired
+                del self.config["disabled_functions"][func_name]
+                self.save_config()
+
+        return True
 
 class AutoReplaceManager:
     def __init__(self):
@@ -189,16 +227,14 @@ class AutoReplaceManager:
 
 class TextCleaner:
     def clean(self, text):
-        # 1. Remove double spaces
         text = " ".join(text.split())
-        # 2. Remove space before punctuation
         text = text.replace(" ,", ",").replace(" .", ".").replace(" !", "!").replace(" ?", "?")
         return text
 
 class SnippetManager:
     def __init__(self):
         self.file = "snippets.json"
-        self.snippets = {} # key: {content, type, hotkey}
+        self.snippets = {}
         self.load()
 
     def load(self):
@@ -213,7 +249,6 @@ class SnippetManager:
             json.dump(self.snippets, f, indent=4, ensure_ascii=False)
 
     def add_snippet(self, key, content, type="text", hotkey=None):
-        # Support hotkey binding
         self.snippets[key] = {"content": content, "type": type, "hotkey": hotkey}
         self.save()
 

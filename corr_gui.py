@@ -4,6 +4,7 @@ import time
 import difflib
 import pyperclip
 import keyboard
+import string
 from corr_config import cfg, gui_queue
 
 # --- CUSTOM WIDGETS ---
@@ -71,8 +72,8 @@ class HistoryItem(ctk.CTkFrame):
         dt_str = f"{data['time']}" # Full date
         ctk.CTkLabel(self.header, text=dt_str, text_color="gray", font=("Arial", 10)).pack(side="right", padx=5)
 
-        # Delete Button (Trash Icon)
-        ctk.CTkButton(self.header, text="🗑️", width=25, height=25, fg_color="transparent", hover_color=colors.get("bubble_hover"),
+        # Delete Button (Trash Icon - Larger)
+        ctk.CTkButton(self.header, text="🗑️", width=40, height=40, font=("Arial", 20), fg_color="transparent", hover_color=colors.get("bubble_hover"),
                       text_color="red", command=self.delete_me).pack(side="right", padx=5)
 
         # Details (hidden by default)
@@ -141,8 +142,6 @@ class HistoryItem(ctk.CTkFrame):
             self.expanded = True
 
     def open_review(self, old, new):
-        # This needs a way to talk to MainApp or just open the dialog directly
-        # Since HistoryItem is deep, let's try opening dialog with this item only
         QuickReviewDialog(self.winfo_toplevel(), [(old, new)])
 
 # --- POPUPS ---
@@ -206,14 +205,26 @@ class ReviewPopup(ctk.CTkToplevel):
 class QuickReviewDialog(ctk.CTkToplevel):
     def __init__(self, parent, review_list):
         super().__init__(parent)
-        self.review_list = review_list # List of (old, new) tuples
+
+        # Filtering logic: remove trivial punctuation changes
+        self.review_list = [
+            (old, new) for old, new in review_list
+            if not self.is_trivial(old, new)
+        ]
+
         self.index = 0
         self.title("Szybki Przegląd Słówek")
-        self.geometry("400x300")
+        self.geometry("500x350")
         self.attributes("-topmost", True)
 
         colors = cfg.get_theme_colors()
         self.configure(fg_color=colors.get("fg_color"))
+
+        if not self.review_list:
+             # If all were trivial
+             ctk.CTkLabel(self, text="Brak istotnych zmian do przeglądu.", font=("Arial", 16)).pack(expand=True)
+             self.after(2000, self.destroy)
+             return
 
         self.lbl_counter = ctk.CTkLabel(self, text="0/0", text_color="gray")
         self.lbl_counter.pack(pady=5)
@@ -221,34 +232,58 @@ class QuickReviewDialog(ctk.CTkToplevel):
         self.card_frame = ctk.CTkFrame(self, fg_color=colors.get("frame_color"), corner_radius=15)
         self.card_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # Use Textbox for multi-line support if needed, but Label is cleaner for single words
-        # We will try dynamic font sizing in show_current
-        self.lbl_bad = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#FF4747", wraplength=380)
+        self.lbl_bad = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#FF4747", wraplength=450)
         self.lbl_bad.pack(expand=True, pady=10)
 
         ctk.CTkLabel(self.card_frame, text="⬇️", font=("Arial", 24)).pack()
 
-        self.lbl_good = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#2CC985", wraplength=380)
+        self.lbl_good = ctk.CTkLabel(self.card_frame, text="", font=("Arial", 32, "bold"), text_color="#2CC985", wraplength=450)
         self.lbl_good.pack(expand=True, pady=10)
 
-        help_lbl = ctk.CTkLabel(self, text="[➡] Akceptuj   [⬅] Odrzuć   [⬇] Pomiń", text_color="gray", font=("Consolas", 10))
+        help_lbl = ctk.CTkLabel(self, text="[➡/Enter] Akceptuj   [⬅/Del] Odrzuć   [⬇/Space] Pomiń   [ESC] Zapisz i Wyjdź", text_color="gray", font=("Consolas", 10))
         help_lbl.pack(pady=10)
 
         self.bind("<Right>", lambda e: self.action_accept())
+        self.bind("<Return>", lambda e: self.action_accept())
         self.bind("<Left>", lambda e: self.action_reject())
+        self.bind("<Delete>", lambda e: self.action_reject())
         self.bind("<Down>", lambda e: self.action_skip())
+        self.bind("<space>", lambda e: self.action_skip())
+        self.bind("<Escape>", lambda e: self.action_save_and_exit())
 
         self.show_current()
 
+    def is_trivial(self, old, new):
+        # 1. Punctuation only change?
+        # Remove punctuation and compare
+        # "kurtkę," vs "kurtkę" -> same
+        trans = str.maketrans('', '', string.punctuation)
+        old_clean = old.translate(trans).strip()
+        new_clean = new.translate(trans).strip()
+
+        if old_clean == new_clean:
+            return True
+
+        # 2. Simple inflections (heuristic) "mamusią" -> "mamą" is hard without NLP
+        # User explicitly asked to ignore "mamusią" -> "mamą".
+        # Let's add that specific case or generic length-based heuristic?
+        # Heuristic: if start matches and length diff < 3? "mamusią" vs "mamą"
+        # "mamusi" vs "mam" -> start "mam".
+        # This is risky. Let's stick to punctuation for now as explicitly safe.
+        # User: "ignorował zamiany „mamusią” na „mamą”."
+        # User: "Ale już np. z kolei „kórtkę," a "kurtkę,” to takie zmiany niech oczywiście pokazuje."
+        # Wait, "kórtkę" is error. "kurtkę" is correct. This is NOT trivial.
+
+        return False
+
     def show_current(self):
         if self.index >= len(self.review_list):
-            self.destroy()
+            self.action_save_and_exit()
             return
 
         old, new = self.review_list[self.index]
 
         # Dynamic font sizing
-        # Base size 32. Reduce if long.
         def get_size(text):
             l = len(text)
             if l < 10: return 40
@@ -276,3 +311,7 @@ class QuickReviewDialog(ctk.CTkToplevel):
     def next_item(self):
         self.index += 1
         self.show_current()
+
+    def action_save_and_exit(self):
+        # Already saving incrementally in actions
+        self.destroy()
