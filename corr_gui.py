@@ -55,12 +55,12 @@ class HistoryItem(ctk.CTkFrame):
 
         # Original
         ctk.CTkLabel(self.details, text="Oryginał:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
-        self.orig_box = ctk.CTkTextbox(self.details, height=50, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        self.orig_box = ctk.CTkTextbox(self.details, height=100, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
         self.orig_box.pack(fill="x", padx=10, pady=2)
 
         # Result
         ctk.CTkLabel(self.details, text="Wynik:", text_color="gray", font=("Arial", 11, "bold")).pack(anchor="w", padx=10, pady=(5,0))
-        self.res_box = ctk.CTkTextbox(self.details, height=50, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
+        self.res_box = ctk.CTkTextbox(self.details, height=100, fg_color=colors.get("input_bg"), text_color=colors.get("text_color"), font=("Arial", 12))
         self.res_box.pack(fill="x", padx=10, pady=2)
 
         # Diff list - now with more visual punch

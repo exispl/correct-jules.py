@@ -26,9 +26,8 @@ class ActionWorker:
             hk = data.get("hotkey")
             if hk:
                 try:
-                    # Bind hotkey to paste content
-                    # We use a lambda to capture content
-                    keyboard.add_hotkey(hk, lambda c=data['content']: self._paste_snippet(c))
+                    # Bind hotkey to execute content based on type
+                    keyboard.add_hotkey(hk, lambda k=key, d=data: self._execute_snippet(k, d))
                 except: pass
 
         # Register Global Check Hotkey
@@ -36,11 +35,42 @@ class ActionWorker:
             keyboard.add_hotkey("ctrl+shift+f9", lambda: self.trigger("CORRECT"))
         except: pass
 
-    def _paste_snippet(self, content):
-        # Simply write content
+    def _execute_snippet(self, key, data):
+        content = data['content']
+        type_s = data.get('type', 'text')
+
         time.sleep(0.1)
-        keyboard.write(content)
-        gui_queue.put(("STATUS", {"text": "Wstawiono snippet (skrót)", "color": "#4aa3df"}))
+
+        if type_s == 'text':
+            # Support multiple lines correctly
+            keyboard.write(content)
+            gui_queue.put(("STATUS", {"text": f"Snippet: {key}", "color": "#4aa3df"}))
+
+        elif type_s == 'app':
+            import subprocess, os
+            try:
+                # Try to run
+                if os.path.exists(content):
+                    os.startfile(content) # Windows specific, convenient
+                else:
+                    # Try subprocess for commands
+                    subprocess.Popen(content, shell=True)
+                gui_queue.put(("STATUS", {"text": f"Uruchomiono: {key}", "color": "#4aa3df"}))
+            except Exception as e:
+                # Try just run command if os.startfile fails or not windows
+                try:
+                    subprocess.Popen(content, shell=True)
+                    gui_queue.put(("STATUS", {"text": f"Uruchomiono cmd: {key}", "color": "#4aa3df"}))
+                except:
+                    gui_queue.put(("STATUS", {"text": f"Błąd app: {e}", "color": "red"}))
+
+        elif type_s == 'macro':
+            # Send keys
+            try:
+                keyboard.send(content)
+                gui_queue.put(("STATUS", {"text": f"Makro: {key}", "color": "#4aa3df"}))
+            except Exception as e:
+                gui_queue.put(("STATUS", {"text": f"Błąd makro: {e}", "color": "red"}))
 
     def _on_key_release(self, event):
         if not self.tracking_enabled: return
@@ -86,10 +116,19 @@ class ActionWorker:
         # 2. Check Snippets (e.g. ;mail)
         snippets = cfg.snippets.snippets
         if word in snippets:
-             content = snippets[word]['content']
-             self._backspace_and_write(word, content)
-             gui_queue.put(("STATUS", {"text": f"Snippet: {word}", "color": "#4aa3df"}))
+             # We need to execute based on type, but for text replacement we also need backspacing.
+             # For app/macro, we might want to backspace the trigger too.
+             # So let's backspace first, then execute.
+
+             self._backspace_only(len(word) + 1) # +1 for space
+             self._execute_snippet(word, snippets[word])
              return
+
+    def _backspace_only(self, count):
+        time.sleep(0.05)
+        for _ in range(count):
+            keyboard.send('backspace')
+            time.sleep(0.005)
 
     def _backspace_and_write(self, old, new):
         time.sleep(0.05)

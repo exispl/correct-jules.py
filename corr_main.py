@@ -93,18 +93,19 @@ class MainApp(ctk.CTk):
         input_label_frame = ctk.CTkFrame(f, fg_color="transparent")
         input_label_frame.grid(row=0, column=0, sticky="ew", padx=5)
 
-        ctk.CTkLabel(input_label_frame, text="Wprowadź tekst:", text_color=colors.get("text_color")).pack(side="left")
+        # Tools Icons (Copy, Paste History) - Much Bigger Icons
+        ctk.CTkButton(input_label_frame, text="📋", width=60, height=50, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 24), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
 
-        # Tools Icons (Copy, Paste History) - Even Bigger Icons
-        ctk.CTkButton(input_label_frame, text="📋", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="white", font=("Arial", 20), command=lambda: self.copy_to_clipboard(self.test_in)).pack(side="right", padx=5)
+        ctk.CTkButton(input_label_frame, text="🗂️", width=60, height=50, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
+                      text_color="white", font=("Arial", 24), command=self.trigger_win_v).pack(side="right", padx=5)
 
-        ctk.CTkButton(input_label_frame, text="🗂️", width=50, height=35, fg_color=colors.get("button_color"), hover_color=colors.get("button_hover"),
-                      text_color="white", font=("Arial", 20), command=self.trigger_win_v).pack(side="right", padx=5)
-
-        self.test_in = ctk.CTkTextbox(f, height=100, font=(cfg.config["font_family"], cfg.config["font_size"]),
+        self.test_in = ctk.CTkTextbox(f, height=120, font=(cfg.config["font_family"], cfg.config["font_size"]),
                                       fg_color=colors.get("input_bg"), text_color=colors.get("text_color"))
         self.test_in.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+
+        # Focus input by default
+        self.after(200, lambda: self.test_in.focus_set())
 
         # Action Buttons Frame
         btn_frame = ctk.CTkFrame(f, fg_color="transparent")
@@ -119,9 +120,10 @@ class MainApp(ctk.CTk):
         ]
 
         for label, code in actions:
-            ctk.CTkButton(btn_frame, text=label, width=120, fg_color=colors.get("button_color"),
+            ctk.CTkButton(btn_frame, text=label, width=140, height=40, font=("Arial", 14, "bold"),
+                          fg_color=colors.get("button_color"),
                           hover_color=colors.get("button_hover"), text_color="white",
-                          command=lambda c=code: self.run_dashboard_action(c)).pack(pady=2)
+                          command=lambda c=code: self.run_dashboard_action(c)).pack(pady=4)
 
         # Output Area
         output_label_frame = ctk.CTkFrame(f, fg_color="transparent")
@@ -407,8 +409,20 @@ class MainApp(ctk.CTk):
             fr = ctk.CTkFrame(self.snip_scroll, fg_color=colors.get("history_bg"))
             fr.pack(fill="x", pady=2, padx=5)
 
-            ctk.CTkLabel(fr, text=key, font=("Consolas", 14, "bold"), text_color=colors.get("accent_text"), width=100, anchor="w").pack(side="left", padx=10)
-            ctk.CTkLabel(fr, text=data['content'][:50], text_color=colors.get("text_color"), anchor="w").pack(side="left", fill="x", expand=True)
+            # Type icon
+            t = data.get("type", "text")
+            icon = "📝" if t == "text" else ("🚀" if t == "app" else "🤖")
+
+            ctk.CTkLabel(fr, text=f"{icon} {key}", font=("Consolas", 14, "bold"), text_color=colors.get("accent_text"), width=120, anchor="w").pack(side="left", padx=10)
+
+            # Content preview
+            content_prev = data['content'][:40] + "..." if len(data['content']) > 40 else data['content']
+            ctk.CTkLabel(fr, text=content_prev, text_color=colors.get("text_color"), anchor="w").pack(side="left", fill="x", expand=True)
+
+            # Hotkey badge
+            hk = data.get("hotkey")
+            if hk:
+                ctk.CTkLabel(fr, text=f"[{hk}]", text_color="gray", font=("Consolas", 11)).pack(side="left", padx=10)
 
             ctk.CTkButton(fr, text="🗑️", width=30, fg_color="transparent", text_color="red", hover_color=colors.get("frame_color"),
                           command=lambda k=key: self.delete_snippet(k)).pack(side="right", padx=5)
@@ -420,49 +434,127 @@ class MainApp(ctk.CTk):
 
     def edit_snippet(self, key):
         data = cfg.snippets.snippets[key]
-        self._snippet_dialog(key, data['content'])
+        self._snippet_dialog(key, data['content'], data.get('type', 'text'), data.get('hotkey', ''))
 
     def delete_snippet(self, key):
         cfg.snippets.remove_snippet(key)
         self.refresh_snip()
         self.status.configure(text=f"Usunięto snippet: {key}", text_color="red")
 
-    def _snippet_dialog(self, edit_key=None, edit_content=None):
+    def _snippet_dialog(self, edit_key=None, edit_content=None, edit_type="text", edit_hotkey=""):
         d = ctk.CTkToplevel(self)
         d.title("Edytor Snippetu")
-        d.geometry("400x300")
+        d.geometry("450x550")
         d.attributes("-topmost", True)
 
         colors = cfg.get_theme_colors()
         d.configure(fg_color=colors.get("fg_color"))
 
-        ctk.CTkLabel(d, text="Skrót (np. ;tel):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        # --- FIELDS ---
+        ctk.CTkLabel(d, text="Skrót tekstowy (np. ;tel):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
         ent_key = ctk.CTkEntry(d)
         ent_key.pack(fill="x", padx=20, pady=5)
         if edit_key: ent_key.insert(0, edit_key)
 
-        ctk.CTkLabel(d, text="Skrót klawiszowy (opcjonalny, np. ctrl+1):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
-        ent_hk = ctk.CTkEntry(d)
-        ent_hk.pack(fill="x", padx=20, pady=5)
-        # Load existing hotkey if editing (assuming data structure allows, simplified here)
+        ctk.CTkLabel(d, text="Typ Snippetu:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        combo_type = ctk.CTkComboBox(d, values=["text", "app", "macro"])
+        combo_type.set(edit_type)
+        combo_type.pack(fill="x", padx=20, pady=5)
 
-        ctk.CTkLabel(d, text="Treść:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
-        txt_content = ctk.CTkTextbox(d, height=100)
+        ctk.CTkLabel(d, text="Skrót klawiszowy (kliknij i wciśnij):", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        ent_hk = ctk.CTkEntry(d, placeholder_text="Brak")
+        ent_hk.pack(fill="x", padx=20, pady=5)
+        if edit_hotkey: ent_hk.insert(0, edit_hotkey)
+
+        # Hotkey Capture Logic
+        def on_hk_focus_in(event):
+            ent_hk.configure(fg_color="#444")
+            self.capturing_hotkey = True
+
+        def on_hk_focus_out(event):
+            ent_hk.configure(fg_color=colors.get("input_bg"))
+            self.capturing_hotkey = False
+
+        ent_hk.bind("<FocusIn>", on_hk_focus_in)
+        ent_hk.bind("<FocusOut>", on_hk_focus_out)
+
+        # Listen for global key press only when focused (simplified simulation)
+        # Proper way: bind <Key> on widget.
+        def on_key(event):
+            # Ignore modifiers alone
+            if event.keysym.lower() in ["control_l", "control_r", "shift_l", "shift_r", "alt_l", "alt_r"]: return
+
+            mods = []
+            if event.state & 0x0004: mods.append("ctrl") # Control
+            if event.state & 0x20000: mods.append("alt") # Alt (standard for some linux/win) - verify state mask
+            # Tkinter state masks are tricky. Let's use a simpler heuristic or just keyboard module if active.
+
+            # Since we use `keyboard` globally, let's just use text input for manual override
+            # OR use keyboard.read_hotkey() but that blocks.
+
+            # Better approach requested: "wcisnąć ten skrót i wtedy niech to będzie"
+            # We can use keyboard.hook momentarily?
+            pass
+
+        # Use a button to start capture to be safe/clean
+        def start_capture():
+            ent_hk.delete(0, "end")
+            ent_hk.insert(0, "Naciśnij skrót...")
+            d.update()
+            try:
+                # This blocks UI but is effective for simple capture
+                hk = keyboard.read_hotkey(suppress=False)
+                ent_hk.delete(0, "end")
+                ent_hk.insert(0, hk)
+            except: pass
+
+        btn_capture = ctk.CTkButton(d, text="🎙️ Przechwyć klawisz", width=120, height=24, command=start_capture, fg_color="#555")
+        btn_capture.pack(anchor="e", padx=20)
+
+        ctk.CTkLabel(d, text="Treść / Ścieżka / Makro:", text_color=colors.get("text_color")).pack(anchor="w", padx=20, pady=(10,0))
+        txt_content = ctk.CTkTextbox(d, height=120)
         txt_content.pack(fill="both", expand=True, padx=20, pady=5)
         if edit_content: txt_content.insert("0.0", edit_content)
+
+        # --- LOGIC ---
+        def has_changes():
+            k = ent_key.get().strip()
+            c = txt_content.get("0.0", "end").strip()
+            t = combo_type.get()
+            h = ent_hk.get().strip()
+
+            # If new
+            if not edit_key:
+                return bool(k or c or h)
+
+            # If edit
+            return (k != edit_key) or (c != edit_content) or (t != edit_type) or (h != edit_hotkey)
 
         def save():
             k = ent_key.get().strip()
             hk = ent_hk.get().strip().lower()
             c = txt_content.get("0.0", "end").strip()
+            t = combo_type.get()
+
             if k and c:
                 if edit_key and edit_key != k:
-                    cfg.snippets.remove_snippet(edit_key) # Rename case
-                cfg.snippets.add_snippet(k, c, hotkey=hk)
+                    cfg.snippets.remove_snippet(edit_key)
+
+                cfg.snippets.add_snippet(k, c, type=t, hotkey=hk)
                 self.refresh_snip()
                 d.destroy()
 
-        ctk.CTkButton(d, text="Zapisz", command=save, fg_color=colors.get("button_color")).pack(pady=10)
+        def on_close():
+            if has_changes():
+                import tkinter.messagebox
+                if tkinter.messagebox.askyesno("Niezapisane zmiany", "Masz niezapisane zmiany. Czy chcesz zapisać?"):
+                    save()
+                    return # Save calls destroy
+            d.destroy()
+
+        d.protocol("WM_DELETE_WINDOW", on_close)
+
+        ctk.CTkButton(d, text="Zapisz", command=save, fg_color=colors.get("button_color"), height=40).pack(fill="x", padx=20, pady=20)
 
     # --- HISTORY ---
     def setup_hist(self):
