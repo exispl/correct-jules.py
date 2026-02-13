@@ -187,18 +187,26 @@ class ReviewPopup(ctk.CTkToplevel):
         self.geometry("600x400")
         self.attributes("-topmost", True)
 
+        # Style: Light Beige background (#F5F5DC), Gray border/wall (via frame or border_color)
+        # "Tam, gdzie jest przegląd słów, to niech tło będzie jasne, jakieś beżowe, a ścianka szara."
+        self.configure(fg_color="#F5F5DC")
+
         font_main = (cfg.config["font_family"], cfg.config["font_size"])
 
         # Header
         h = ctk.CTkFrame(self, fg_color="transparent")
         self.header_frame = h # Store reference
         h.pack(fill="x", padx=15, pady=10)
+        # Text needs to be dark for beige bg
         ctk.CTkLabel(h, text=f"{action} ({int(duration*1000)}ms)", text_color="gray").pack(side="right")
-        ctk.CTkLabel(h, text="Wynik AI:", font=(font_main[0], 16, "bold"), text_color="#2CC985").pack(side="left")
+        ctk.CTkLabel(h, text="Wynik AI:", font=(font_main[0], 16, "bold"), text_color="#2E4053").pack(side="left") # Dark slate
 
-        # Body
-        self.txt = ctk.CTkTextbox(self, font=font_main)
-        self.txt.pack(fill="both", expand=True, padx=15, pady=5)
+        # Body - Frame with Gray Border ("ścianka szara")
+        body_frame = ctk.CTkFrame(self, fg_color="transparent", border_color="gray", border_width=2)
+        body_frame.pack(fill="both", expand=True, padx=15, pady=5)
+
+        self.txt = ctk.CTkTextbox(body_frame, font=font_main, fg_color="white", text_color="black")
+        self.txt.pack(fill="both", expand=True, padx=2, pady=2)
         self.txt.insert("0.0", result)
 
         # Buttons

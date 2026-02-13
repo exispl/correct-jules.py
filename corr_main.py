@@ -20,7 +20,7 @@ class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("AI Assistant Pro v0.2.1")
-        self.geometry("1300x900")
+        self.geometry("1050x810")
         self.protocol("WM_DELETE_WINDOW", self.hide_window)
 
         # ESC to close/hide
@@ -41,11 +41,15 @@ class MainApp(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=10, pady=5)
 
-        # Configure Tab Font
-        # self.tabview._segmented_button.configure(font=ctk.CTkFont(family=cfg.config["font_family"], size=16, weight="bold"))
-        # Accessing private member is risky but common in CTk customization.
+        # Configure Tab Font - Normal weight, not bold.
+        # "W terminalu niech te poszczególne zakładki będą jako każdy inny baton. No i niech nie będą pogrubione..."
         try:
-             self.tabview._segmented_button.configure(font=ctk.CTkFont(family=cfg.config["font_family"], size=16, weight="bold"))
+             self.tabview._segmented_button.configure(
+                 font=ctk.CTkFont(family=cfg.config["font_family"], size=16, weight="normal"),
+                 corner_radius=10, # More rounded
+             )
+             # Try to simulate "separate buttons" by adding spacing if possible,
+             # but segmented button is a single widget. corner_radius helps it look less like a bar.
         except: pass
 
         self.tabs = {
@@ -54,8 +58,8 @@ class MainApp(ctk.CTk):
             "Snip": self.tabview.add("Snippety"),
             "Short": self.tabview.add("Skróty"),
             "Suno": self.tabview.add("Suno"),
-            "Info": self.tabview.add("Info"),
             "Sett": self.tabview.add("Ustawienia"),
+            "Info": self.tabview.add("Info"),
         }
 
         # Init Modules - Pre-load all content
@@ -64,8 +68,11 @@ class MainApp(ctk.CTk):
         self.setup_snip()
         self.setup_short()
         self.setup_suno()
-        self.setup_info()
         self.setup_sett()
+        self.setup_info()
+
+        # Force focus on input
+        self.after(100, lambda: self.test_in.focus_set())
 
         # Footer
         ver = cfg.get_version()
@@ -75,10 +82,8 @@ class MainApp(ctk.CTk):
         if not cfg.config.get("api_key"):
             self.status.configure(text="⚠️ Skonfiguruj klucz API w ustawieniach!", text_color="#ffcc00")
 
-        if not cfg.user_profile.get("logged_in"):
-            self.show_login_overlay()
-        else:
-            self.show_user_badge()
+        # Static Badge (No Login Logic)
+        self.show_user_badge()
 
         # Background tasks
         self.check_queue()
@@ -295,60 +300,18 @@ class MainApp(ctk.CTk):
 
     def show_user_badge(self):
         colors = cfg.get_theme_colors()
-        name = cfg.user_profile.get("name", "Gość")
+        name = "Kamil Kowalczyk" # Hardcoded as requested
         # Larger Avatar (48px height approx via font + padding)
+        # Position: "ciutkę do góry i ciutkę w prawo"
+        # Prev: relx=0.98, rely=0.02.
+        # New: relx=0.99, rely=0.01 (Higher and more right)
         badge = ctk.CTkLabel(self.tabs["Dash"], text=f"👤 {name}",
                              font=("Arial", 20, "bold"),
                              height=48,
                              text_color=colors.get("text_color"),
                              fg_color=colors.get("frame_color"),
                              corner_radius=24) # Rounded pill
-        badge.place(relx=0.98, rely=0.02, anchor="ne")
-        badge.bind("<Button-1>", lambda e: self.logout())
-
-    def logout(self):
-        cfg.user_profile = {"name": "Gość", "email": "", "photo": "", "logged_in": False}
-        cfg.save_profile()
-        self.status.configure(text="Wylogowano.", text_color="yellow")
-        for w in self.tabs["Dash"].place_slaves():
-            if isinstance(w, ctk.CTkLabel) and "👤" in w.cget("text"): w.destroy()
-        self.show_login_overlay()
-
-    def show_login_overlay(self):
-        self.login_frame = ctk.CTkFrame(self, fg_color="black") # Overlay
-        self.login_frame.place(relx=0, rely=0, relwidth=1, relheight=1)
-
-        c = ctk.CTkFrame(self.login_frame, fg_color="#333", corner_radius=20, width=400, height=300)
-        c.place(relx=0.5, rely=0.5, anchor="center")
-        c.pack_propagate(False)
-
-        ctk.CTkLabel(c, text="AI Assistant Pro", font=("Arial", 24, "bold"), text_color="white").pack(pady=20)
-        ctk.CTkLabel(c, text="Zaloguj się, aby synchronizować ustawienia", text_color="gray").pack()
-
-        btn_g = ctk.CTkButton(c, text="   Zaloguj przez Google   ", fg_color="white", text_color="black", hover_color="#f0f0f0",
-                              height=40, font=("Arial", 14), command=self.perform_fake_login)
-        btn_g.pack(pady=40)
-
-        ctk.CTkButton(c, text="Pomiń (Tryb Gościa)", fg_color="transparent", text_color="gray", hover=False, command=self.skip_login).pack(side="bottom", pady=20)
-
-        self.perform_fake_login()
-
-    def perform_fake_login(self):
-        if self.login_frame:
-            self.login_frame.destroy()
-        cfg.user_profile = {
-            "name": "Kamil Kowalczyk",
-            "email": "kamil@kowalczyk.com",
-            "photo": "",
-            "logged_in": True
-        }
-        cfg.save_profile()
-        self.show_user_badge()
-        self.status.configure(text="Zalogowano jako Kamil", text_color="green")
-
-    def skip_login(self):
-        self.login_frame.destroy()
-        self.status.configure(text="Tryb Gościa.", text_color="gray")
+        badge.place(relx=0.99, rely=0.01, anchor="ne")
 
     def run_dashboard_action(self, action_code):
         # Check if enabled
@@ -524,6 +487,13 @@ class MainApp(ctk.CTk):
 
         ctk.CTkButton(tool_bar, text="➕ Nowy Snippet", command=self.add_snippet_dialog,
                       fg_color=colors.get("button_color"), text_color="black").pack(side="left")
+
+        # Search Bar
+        self.snip_search_var = tk.StringVar()
+        self.snip_search_var.trace("w", lambda *args: self.refresh_snip())
+        entry_search = ctk.CTkEntry(tool_bar, placeholder_text="Szukaj snippetu...", textvariable=self.snip_search_var, width=250)
+        entry_search.pack(side="left", padx=20)
+
         ctk.CTkLabel(tool_bar, text="Wpisz skrót (np. ;mail) -> Spacja", text_color="gray").pack(side="right")
 
         # List
@@ -534,8 +504,16 @@ class MainApp(ctk.CTk):
     def refresh_snip(self):
         for w in self.snip_scroll.winfo_children(): w.destroy()
         colors = cfg.get_theme_colors()
+        search_q = self.snip_search_var.get().lower()
 
         for key, data in cfg.snippets.snippets.items():
+            # Search Filter
+            content_txt = data['content'].lower()
+            hk_txt = (data.get("hotkey") or "").lower()
+            if search_q:
+                if (search_q not in key.lower()) and (search_q not in content_txt) and (search_q not in hk_txt):
+                    continue
+
             fr = ctk.CTkFrame(self.snip_scroll, fg_color=colors.get("history_bg"))
             fr.pack(fill="x", pady=2, padx=5)
 
@@ -555,9 +533,10 @@ class MainApp(ctk.CTk):
             if hk:
                 ctk.CTkLabel(fr, text=f"[{hk}]", text_color="gray", font=("Consolas", 11)).pack(side="left", padx=10)
 
-            ctk.CTkButton(fr, text="🗑️", width=30, fg_color="transparent", text_color="red", hover_color=colors.get("frame_color"),
+            # Larger Buttons (48x48 requested)
+            ctk.CTkButton(fr, text="🗑️", width=50, height=50, font=("Arial", 20), fg_color="transparent", text_color="red", hover_color=colors.get("frame_color"),
                           command=lambda k=key: self.delete_snippet(k)).pack(side="right", padx=5)
-            ctk.CTkButton(fr, text="✏️", width=30, fg_color="transparent", text_color=colors.get("text_color"), hover_color=colors.get("frame_color"),
+            ctk.CTkButton(fr, text="✏️", width=50, height=50, font=("Arial", 20), fg_color="transparent", text_color=colors.get("text_color"), hover_color=colors.get("frame_color"),
                           command=lambda k=key: self.edit_snippet(k)).pack(side="right", padx=5)
 
     def add_snippet_dialog(self):
@@ -575,8 +554,10 @@ class MainApp(ctk.CTk):
     def _snippet_dialog(self, edit_key=None, edit_content=None, edit_type="text", edit_hotkey="", edit_schedule=None):
         d = ctk.CTkToplevel(self)
         d.title("Edytor Snippetu")
-        d.geometry("500x750") # Taller for schedule
+        d.geometry("500x750")
         d.attributes("-topmost", True)
+        d.grab_set() # Modal - block interaction with main window
+        d.focus_force()
 
         # Bind ESC to close snippet dialog too
         d.bind("<Escape>", lambda e: d.destroy())
@@ -603,16 +584,17 @@ class MainApp(ctk.CTk):
         self.snippet_hk_var = tk.StringVar(value=edit_hotkey)
 
         def capture_snip_hk():
-            btn_hk.configure(text="Naciśnij klawisz...", fg_color="red")
+            # Light Beige background for recording (#F5F5DC or similar)
+            btn_hk.configure(text="Naciśnij klawisz...", fg_color="#E0E0C0", text_color="black")
             d.update()
             try:
                 hk = keyboard.read_hotkey(suppress=False)
                 # FORMAT UPPERCASE
                 hk = hk.upper().replace("+", " + ")
                 self.snippet_hk_var.set(hk)
-                btn_hk.configure(text=hk, fg_color="#555")
+                btn_hk.configure(text=hk, fg_color="#555", text_color="white")
             except:
-                btn_hk.configure(text="Błąd", fg_color="#555")
+                btn_hk.configure(text="Błąd", fg_color="#555", text_color="white")
 
         btn_hk = ctk.CTkButton(scroll, textvariable=self.snippet_hk_var, command=capture_snip_hk, fg_color="#555")
         btn_hk.pack(fill="x", padx=10, pady=5)
@@ -625,6 +607,7 @@ class MainApp(ctk.CTk):
 
         # --- SCHEDULING UI ---
         ctk.CTkLabel(scroll, text="Harmonogram (Opcjonalny):", font=("Arial", 12, "bold"), text_color=colors.get("accent_text")).pack(anchor="w", padx=10, pady=(20,5))
+        ctk.CTkLabel(scroll, text="Snippet zadziała tylko w podanych godzinach i dniach.", font=("Arial", 10), text_color="gray").pack(anchor="w", padx=10)
 
         sch_frame = ctk.CTkFrame(scroll, fg_color=colors.get("frame_color"))
         sch_frame.pack(fill="x", padx=10, pady=5)

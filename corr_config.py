@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     "hotkey_tone": "CTRL + F9",
     "hotkey_explain": "CTRL + F10",
     "font_family": "Segoe UI",
-    "font_size": 18,
+    "font_size": 22,
     "theme": "Light",
     "icons_path": "D:\\exis\\Icons",
     "disabled_functions": {}, # key: timestamp (float)
